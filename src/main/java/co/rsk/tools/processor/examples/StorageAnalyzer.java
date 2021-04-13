@@ -18,6 +18,7 @@ import co.rsk.trie.TrieKeySlice;
 import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.db.TrieKeyMapper;
 import org.ethereum.util.ByteUtil;
+import org.ethereum.vm.PrecompiledContracts;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -45,7 +46,10 @@ public class StorageAnalyzer  extends RskBlockProcessor {
             }
             fileWriter = new FileWriter(file);
             fileWriter.write("BlockNumber,UnixTime,Accounts,StorageCells,"+
-                    "longValues,accountsSize,cellsSize,contracts,storageRoots," +
+                    "StorageCellsWithChildren,"+
+                    "longValues,accountsSize,cellsSize,"+
+                    "bridgeCellsSize,bridgeCellsCount,"+
+                    "contracts,storageRoots," +
                     "longValuesSize,sharedLongValuesSize," +
                     "codeSize,sharedCodeSize,embeddedNodes,virtualNodes\n");
 
@@ -72,22 +76,51 @@ public class StorageAnalyzer  extends RskBlockProcessor {
     private class ProcessTrieResults {
         int realNodes;
         int embeddedNodes;
-        int virtualNodes; // virtualNodes == realNodes + embeddedNodes
 
-        int accounts;
-        int storageCells;
+        int[] embeddedNodesCountByType = new int[6];
+        long[] embeddedNodesSizeByType =new long[6];
+        long[] embeddedNodesRefSizeByType=new long[6];
+
+        int[] countByType= new int[6];
+        long[] sizeByType= new long[6];
+
+        int virtualNodes; // virtualNodes == realNodes + embeddedNodes
         int longValues;
-        int nonEmptyCodes;
-        int storageRoots;
-        long accountsSize;
-        long cellsSize;
+        int storageCellsWithChildren;
+        long bridgeCellsSize;
+        int bridgeCellCount;
         long sharedLongValuesSize;
         long longValuesSize;
-        long codeSize;
         long sharedCodeSize;
+
+        public int storageRoots() {
+            return countByType[NodeType.StorageRoot.ordinal()];
+        }
+
+        public int accounts() {
+            return countByType[NodeType.Account.ordinal()];
+        }
+        public int storageCells() {
+            return countByType[NodeType.StorageCell.ordinal()];
+        }
+        int nonEmptyCodes() {
+            return countByType[NodeType.Code.ordinal()];
+        }
+        public long accountsSize() {
+            return sizeByType[NodeType.Account.ordinal()];
+        }
+        public long codeSize() {
+            return sizeByType[NodeType.Code.ordinal()];
+        }
+        public long cellsSize() {
+            return sizeByType[NodeType.StorageCell.ordinal()];
+        }
+
+
     }
-    // use counter
+    // use counter of certain code hash
     HashMap<Keccak256,Integer> useCount;
+    HashMap<Keccak256, String> firstUse; // fist contract that uses this codehash
 
 
     ////////////////////////////////////////////////////////////////////////////
@@ -107,6 +140,7 @@ public class StorageAnalyzer  extends RskBlockProcessor {
                                        FastTrieKeySlice childKey,
                                        NodeType previousNodeType,
                                         NodeType nodeType,
+                                        RskAddress addr,
                                         ProcessTrieResults results) {
         if (valueLength>0) {
             // the first time, it must be an account
@@ -133,8 +167,10 @@ public class StorageAnalyzer  extends RskBlockProcessor {
                     (previousNodeType == NodeType.StorageCell))
             {
                 nodeType = NodeType.StorageCell;
-                results.storageCells++;
-                results.cellsSize +=valueLength;
+                if (addr.equals(PrecompiledContracts.BRIDGE_ADDR)) {
+                    results.bridgeCellsSize +=valueLength;
+                    results.bridgeCellCount ++;
+                }
             } else
                 if ((nodeType==NodeType.StorageRoot) || (nodeType==NodeType.Code)) {
                     // NodeType.StorageRoot: The data contained must be a single zero
@@ -146,9 +182,7 @@ public class StorageAnalyzer  extends RskBlockProcessor {
                 }
             // Remasc and standard accounts
             if (nodeType == NodeType.Account) {
-                results.accounts++;
-                results.accountsSize +=valueLength;
-
+                //
             }
         } else
         if (previousNodeType==NodeType.StorageRoot) {
@@ -159,8 +193,11 @@ public class StorageAnalyzer  extends RskBlockProcessor {
 
     private static byte[] remascTrieKey = mapRskAddressToKey(RemascTransaction.REMASC_ADDRESS);
 
-    private void processReference(NodeReference reference,byte side, FastTrieKeySlice key,
-                                         NodeType previousNodeType, ProcessTrieResults results) {
+    private void processReference(NodeReference reference,byte side,
+                                  FastTrieKeySlice key,
+                                  NodeType previousNodeType,
+                                  RskAddress addr,
+                                  ProcessTrieResults results) {
         NodeType nodeType = previousNodeType; // keep for now
         if (!reference.isEmpty()) {
             Optional<Trie> node = reference.getNode();
@@ -175,10 +212,8 @@ public class StorageAnalyzer  extends RskBlockProcessor {
                 if (side==1) {
                     // this is the code node
                     nodeType = NodeType.Code;
-                    results.nonEmptyCodes++;
                 } else {
                     nodeType = NodeType.StorageRoot;
-                    results.storageRoots++;
                 }
             }
 
@@ -196,7 +231,7 @@ public class StorageAnalyzer  extends RskBlockProcessor {
 
             if (node.isPresent()) {
                 Trie childTrie = node.get();
-                processTrie(childTrie, childKey,previousNodeType,nodeType, results,reference.isEmbeddable());
+                processTrie(childTrie, childKey,previousNodeType,nodeType, results,reference.isEmbeddable(),addr);
             }
         }
     }
@@ -236,7 +271,9 @@ public class StorageAnalyzer  extends RskBlockProcessor {
     private void processTrie(Trie trie,FastTrieKeySlice parentKey,
                                     NodeType previousNodeType,
                                     NodeType nodeType,
-                                    ProcessTrieResults results,boolean isEmbedded) {
+                                    ProcessTrieResults results,
+                             boolean isEmbedded,
+                             RskAddress addr) {
 
         results.virtualNodes++;
         if (results.virtualNodes%1000==0) {
@@ -249,10 +286,6 @@ public class StorageAnalyzer  extends RskBlockProcessor {
             prevNodes = results.virtualNodes;
             prevTime = currentTime;
         }
-        if (isEmbedded) {
-            results.embeddedNodes ++;
-        } else
-            results.realNodes++;
 
         // Because TrieKeySlice does not have a append() method, we cannot
         // simply append here the trie shared path into the key (the rebuildSharedPath())
@@ -270,7 +303,24 @@ public class StorageAnalyzer  extends RskBlockProcessor {
             throw new RuntimeException("Missing account record");
 
         // Switch to Account node type if that's the case
-        nodeType = processNode(valueLength,key,previousNodeType,nodeType,results);
+        nodeType = processNode(valueLength,key,previousNodeType,nodeType,addr,results);
+
+        results.countByType[nodeType.ordinal()] ++;
+        results.sizeByType[nodeType.ordinal()] +=valueLength;
+
+        if (isEmbedded) {
+            results.embeddedNodes ++;
+            results.embeddedNodesCountByType[nodeType.ordinal()] ++;
+            results.embeddedNodesSizeByType[nodeType.ordinal()] +=trie.toMessage().length;
+            results.embeddedNodesRefSizeByType[nodeType.ordinal()] +=valueLength;
+
+        } else
+            results.realNodes++;
+
+        // Extract the account name
+        if ((nodeType==NodeType.Account) && (key.length()==248)) {
+            addr = new RskAddress(key.slice(88,248).encode());
+        }
 
         if (nodeType==NodeType.StorageRoot) {
             // The data contained must be a single zero
@@ -280,24 +330,28 @@ public class StorageAnalyzer  extends RskBlockProcessor {
         if (trie.hasLongValue()) {
             results.longValues++;
             results.longValuesSize +=valueLength;
-            if (nodeType==NodeType.Code)
-                results.codeSize +=valueLength;
-
-            int previousCounterValue = 0;
+                int previousCounterValue = 0;
 
             if (useCount.containsKey(trie.getValueHash())) {
                 previousCounterValue = useCount.get(trie.getValueHash()).intValue();
                 results.sharedLongValuesSize += valueLength;
                 if (nodeType==NodeType.Code)
                     results.sharedCodeSize +=valueLength;
+            } else {
+                firstUse.put(trie.getValueHash(),ByteUtil.toHexString(key.encode()));
             }
             useCount.put(trie.getValueHash(), (previousCounterValue + 1));
         }
 
         NodeReference leftReference = trie.getLeft();
-        processReference(leftReference,LEFT_CHILD_IMPLICIT_KEY,key,nodeType,results);
         NodeReference rightReference = trie.getRight();
-        processReference(rightReference,RIGHT_CHILD_IMPLICIT_KEY,key,nodeType,results);
+        if (nodeType==NodeType.StorageCell)  {
+            if ((!leftReference.isEmpty()) || (!rightReference.isEmpty())) {
+                results.storageCellsWithChildren++;
+            }
+        }
+        processReference(leftReference,LEFT_CHILD_IMPLICIT_KEY,key,nodeType,addr,results);
+        processReference(rightReference,RIGHT_CHILD_IMPLICIT_KEY,key,nodeType,addr,results);
     }
 
     long started;
@@ -306,29 +360,46 @@ public class StorageAnalyzer  extends RskBlockProcessor {
     @Override
     public boolean processBlock() {
         useCount = new HashMap<>();
+        firstUse = new HashMap<>();
         prevNodes = 0;
         prevTime =0;
         ProcessTrieResults results = new ProcessTrieResults();
         started= System.currentTimeMillis();
         processTrie(getTrieAtCurrentBlock(),FastTrieKeySlice.empty(),
-                NodeType.AccountMidNode,NodeType.AccountMidNode,results,false);
+                NodeType.AccountMidNode,NodeType.AccountMidNode,results,false,null);
         long ended = System. currentTimeMillis();
+
         String line = ""+currentBlock.getNumber()+","+
                 currentBlock.getTimestamp()+","+
-                results.accounts+","+
-                results.storageCells+","+
+                results.accounts()+","+
+                results.storageCells()+","+
+                results.storageCellsWithChildren+","+
                 results.longValues+","+
-                results.accountsSize+","+
-                results.cellsSize+","+
-                results.nonEmptyCodes+","+
-                results.storageRoots+","+
+                results.accountsSize()+","+
+                results.cellsSize()+","+
+                results.bridgeCellsSize+","+
+                results.bridgeCellCount+","+
+                results.nonEmptyCodes()+","+
+                results.storageRoots()+","+
                 results.longValuesSize+","+
                 results.sharedLongValuesSize+","+
-                results.codeSize+","+
+                results.codeSize()+","+
                 results.sharedCodeSize+","+
                 results.embeddedNodes+","+
                 results.virtualNodes
                 ;
+        System.out.println("currentBlock.getNumber(): "+currentBlock.getNumber());
+        System.out.println("currentBlock.getTimestamp(): "+currentBlock.getTimestamp());
+        System.out.println("storageCellsWithChildren: "+results.storageCellsWithChildren);
+        System.out.println("longValues: "+results.longValues);
+        System.out.println("bridgeCellsSize: "+results.bridgeCellsSize);
+        System.out.println("bridgeCellCount: "+results.bridgeCellCount);
+        System.out.println("longValuesSize: "+results.longValuesSize);
+        System.out.println("sharedLongValuesSize: "+results.sharedLongValuesSize);
+        System.out.println("sharedCodeSize: "+results.sharedCodeSize);
+        System.out.println("embeddedNodes: "+results.embeddedNodes);
+        printByType("Embedded",results.embeddedNodesCountByType,results.embeddedNodesSizeByType);
+        printByType("All",results.countByType,results.sizeByType);
 
         System.out.println(line);
         System.out.println("Elapsed time [s]: "+(ended-started)/1000);
@@ -343,6 +414,21 @@ public class StorageAnalyzer  extends RskBlockProcessor {
 
         return true;
     }
+
+    public String div(long size,int count) {
+        if (count==0)
+            return "--";
+        return ""+(size/count);
+    }
+
+    public void printByType(String name,int[] count,long[] size) {
+        NodeType[] ntvalues = NodeType.values();
+        System.out.println(name + ":");
+        for (int i = 0; i < 6; i++) {
+            System.out.println(" " + ntvalues[i].name() + " count: " + count[i]+" size: "+size[i]+" avgsize: "+div(size[i],count[i]));
+        }
+    }
+
     public void dumpUsecount() {
         // Each keccak hash is one element that represents a whose family of
         // equal contracts.
@@ -367,7 +453,7 @@ public class StorageAnalyzer  extends RskBlockProcessor {
             List<Keccak256> representatives = pair.getValue();
             String s ="";
             for (int i=0;i<representatives.size();i++) {
-                s = s+" "+representatives.get(i).toHexString();
+                s = s+" "+firstUse.get(representatives.get(i));
                 index++;
                 if (index==10) break;
             }
