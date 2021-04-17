@@ -240,7 +240,7 @@ public class StorageLoader extends RskBlockProcessor {
                     count++;
                     if (count%100000==0) {
                         System.out.println("Count: "+count+" "+count*100/1200000+"%");
-                        System.out.println("triesize: "+indexTrie.trieSize());
+                        //System.out.println("triesize: "+indexTrie.trieSize());
                     }
                 }
             }
@@ -252,8 +252,10 @@ public class StorageLoader extends RskBlockProcessor {
             System.out.println("Time[s]: "+(currentTime-started)/1000);
             in.close();
             gc();
-            System.out.println("emptytriesize: "+indexTrie.emptyTrieSize());
-            System.out.println("emptypath: "+indexTrie.emptyPathTrieSize());
+            System.out.println("noPathCount: "+indexTrie.noPathCount());
+            System.out.println("NPCount: "+indexTrie.NPCount());
+            System.out.println("dataCount: "+indexTrie.dataCount());
+
             System.out.println("Count: "+count);
             //System.out.println("map.size: "+map.size());
             System.out.println("Used After MB: " + (double) (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024  /1024);

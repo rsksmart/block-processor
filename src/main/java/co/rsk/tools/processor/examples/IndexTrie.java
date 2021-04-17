@@ -42,27 +42,25 @@ import java.util.*;
  *
  * An empty node has no subnodes and a null value
  */
-public class IndexTrie extends IndexTrieMid {
+public class IndexTrie {
     static final int nullValue = -1;
 
     private static final Profiler profiler = ProfilerFactory.getInstance();
 
-    /*protected final IndexTrie left;
+    protected final IndexTrie left;
     protected final IndexTrie right;
     protected final int value;
-*/
-    private CompactTrieKeySlice sharedPath;
 
     static IndexTrie empty() {
         return null; //new IndexTrie();
     }
 
     public IndexTrie() {
-        this( CompactTrieKeySlice.empty(), nullValue);
+        this( nullValue);
     }
 
-    private IndexTrie(CompactTrieKeySlice sharedPath, int value) {
-        this( sharedPath, value, null, null);
+    private IndexTrie( int value) {
+        this(  value, null, null);
     }
 
     public boolean equals(Object obj) {
@@ -79,14 +77,12 @@ public class IndexTrie extends IndexTrieMid {
     }
 
     // full constructor
-    private IndexTrie(CompactTrieKeySlice sharedPath, int value, IndexTrie left, IndexTrie right) {
-        super(value,left,right);
-        /*this.value = value;
+    protected IndexTrie( int value, IndexTrie left, IndexTrie right) {
+
+        this.value = value;
         this.right = right;
         this.left = left;
-        */
 
-        this.sharedPath = sharedPath;
     }
 
     /**
@@ -232,6 +228,12 @@ public class IndexTrie extends IndexTrieMid {
         return set;
     }
 
+
+
+    public boolean hasPath() {
+        return (false);
+    }
+
     /**
      * trieSize returns the number of nodes in trie
      *
@@ -246,11 +248,39 @@ public class IndexTrie extends IndexTrieMid {
         return r;
     }
 
-
-    public boolean hasPath() {
-        return (sharedPath.length()!=0);
+    public int noPathCount() {
+        int r =0;
+        if (!hasPath())
+            r ++;
+        if (left!=null)
+            r += this.left.noPathCount();
+        if (right!=null)
+            r+= this.right.noPathCount();
+        return r;
     }
 
+    public int NPCount() {
+        int r =0;
+        if (this instanceof IndexTriePN)
+            r++;
+        if (left!=null)
+            r += this.left.NPCount();
+        if (right!=null)
+            r+= this.right.NPCount();
+        return r;
+    }
+
+
+    public int dataCount() {
+        int r =0;
+        if (value!=nullValue)
+            r++;
+        if (left!=null)
+            r += this.left.dataCount();
+        if (right!=null)
+            r+= this.right.dataCount();
+        return r;
+    }
 
     /**
      * get retrieves the associated value given the key
@@ -264,12 +294,10 @@ public class IndexTrie extends IndexTrieMid {
         return find(CompactTrieKeySlice.fromKey(key));
     }
 
+
     @Nullable
     private IndexTrie find(CompactTrieKeySlice key) {
-        if (sharedPath.length() > key.length()) {
-            return null;
-        }
-
+        CompactTrieKeySlice sharedPath = getSharedPath();
         int commonPathLength = key.commonPath(sharedPath).length();
         if (commonPathLength < sharedPath.length()) {
             return null;
@@ -341,10 +369,16 @@ public class IndexTrie extends IndexTrieMid {
             childImplicitByte = (byte) 1;
         }
 
-        CompactTrieKeySlice newSharedPath = trie.sharedPath.rebuildSharedPath(childImplicitByte, child.sharedPath);
-        return new IndexTrie(newSharedPath, child.value, child.left, child.right);
+        CompactTrieKeySlice newSharedPath = trie.getSharedPath().rebuildSharedPath(childImplicitByte, child.getSharedPath());
+        return newIndexTrie(newSharedPath, child.value, child.left, child.right);
     }
 
+    public static IndexTrie newIndexTrie( CompactTrieKeySlice newSharedPath,int value, IndexTrie left, IndexTrie right) {
+        if (newSharedPath.length() == 0)
+            return new IndexTrie(value, left, right);
+        else
+            return new IndexTriePN(newSharedPath,value, left, right);
+    }
     /**
      * put key with associated value, returning a new NewTrie
      *
@@ -366,6 +400,7 @@ public class IndexTrie extends IndexTrieMid {
     }
 
     private IndexTrie internalPut(CompactTrieKeySlice key, int value, boolean isRecursiveDelete) {
+        CompactTrieKeySlice sharedPath = getSharedPath();
         CompactTrieKeySlice commonPath = key.commonPath(sharedPath);
         if (commonPath.length() < sharedPath.length()) {
             // when we are removing a key we know splitting is not necessary. the key wasn't found at this point.
@@ -386,15 +421,15 @@ public class IndexTrie extends IndexTrieMid {
             }
 
             if (isRecursiveDelete) {
-                return new IndexTrie(this.sharedPath, nullValue);
+                return newIndexTrie(sharedPath, nullValue,null,null);
             }
 
             if (isEmptyTrie(value, this.left, this.right)) {
                 return null;
             }
 
-            return new IndexTrie(
-                    this.sharedPath,
+            return newIndexTrie(
+                    sharedPath,
                     value,
                     this.left,
                     this.right
@@ -402,7 +437,7 @@ public class IndexTrie extends IndexTrieMid {
         }
 
         if (isEmptyTrie()) {
-            return new IndexTrie( key, value);
+            return newIndexTrie(key, value,null,null);
         }
 
         // this bit will be implicit and not present in a shared path
@@ -435,13 +470,14 @@ public class IndexTrie extends IndexTrieMid {
             return null;
         }
 
-        return new IndexTrie(this.sharedPath, this.value, newLeft, newRight);
+        return newIndexTrie(sharedPath, this.value, newLeft, newRight);
     }
 
     private IndexTrie split(CompactTrieKeySlice commonPath) {
+        CompactTrieKeySlice sharedPath = getSharedPath();
         int commonPathLength = commonPath.length();
         CompactTrieKeySlice newChildSharedPath = sharedPath.slice(commonPathLength + 1, sharedPath.length());
-        IndexTrie newChildTrie = new IndexTrie(newChildSharedPath, this.value, this.left, this.right);
+        IndexTrie newChildTrie = newIndexTrie(newChildSharedPath, this.value, this.left, this.right);
 
         // this bit will be implicit and not present in a shared path
         byte pos = sharedPath.get(commonPathLength);
@@ -456,7 +492,7 @@ public class IndexTrie extends IndexTrieMid {
             newRight = newChildTrie;
         }
 
-        return new IndexTrie(commonPath, nullValue, newLeft, newRight);
+        return newIndexTrie(commonPath, nullValue, newLeft, newRight);
     }
 
     public boolean isTerminal() {
@@ -510,8 +546,9 @@ public class IndexTrie extends IndexTrieMid {
     public int getValue() {
         return value;
     }
+
     public CompactTrieKeySlice getSharedPath() {
-        return sharedPath;
+        return CompactTrieKeySlice.empty();
     }
 
     public Iterator<IterationElement> getInOrderIterator() {
@@ -785,6 +822,7 @@ public class IndexTrie extends IndexTrieMid {
 
     @Nullable
     private List<IndexTrie> findNodes(CompactTrieKeySlice key) {
+        CompactTrieKeySlice sharedPath = getSharedPath();
         if (sharedPath.length() > key.length()) {
             return null;
         }
