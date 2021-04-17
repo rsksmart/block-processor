@@ -33,13 +33,13 @@ import java.util.Arrays;
 public class FastTrieKeySlice {
     // Always store in maximally expanded format
     private final byte[] expandedKey;
-    private final int offset;
-    private final int limit;
+    private final short offset;
+    private final short limit;
 
     public FastTrieKeySlice(byte[] expandedKey, int offset, int limit) {
         this.expandedKey = expandedKey;
-        this.offset = offset;
-        this.limit = limit;
+        this.offset = (short) offset;
+        this.limit = (short) limit;
     }
 
     public FastTrieKeySlice clone() {
@@ -59,6 +59,8 @@ public class FastTrieKeySlice {
     }
 
     public FastTrieKeySlice slice(int from, int to) {
+        if (from==to) // SDL performance fix
+            return empty();
         if (from < 0) {
             throw new IllegalArgumentException("The start position must not be lower than 0");
         }
@@ -67,19 +69,31 @@ public class FastTrieKeySlice {
             throw new IllegalArgumentException("The start position must not be greater than the end position");
         }
 
-        int newOffset = offset + from;
+        short newOffset = (short) (offset + from);
         if (newOffset > limit) {
             throw new IllegalArgumentException("The start position must not exceed the key length");
         }
 
-        int newLimit = offset + to;
+        short newLimit = (short) (offset + to);
         if (newLimit > limit) {
             throw new IllegalArgumentException("The end position must not exceed the key length");
         }
 
+        //
         return new FastTrieKeySlice(expandedKey, newOffset, newLimit);
     }
 
+    public FastTrieKeySlice commonPath(FastTrieKeySlice other) {
+        short maxCommonLengthPossible = (short) Math.min(length(), other.length());
+        for (int i = 0; i < maxCommonLengthPossible; i++) {
+            if (get(i) != other.get(i)) {
+                return slice(0, i);
+            }
+        }
+
+
+        return slice((short) 0, maxCommonLengthPossible);
+    }
     public FastTrieKeySlice commonPath(co.rsk.trie.TrieKeySlice other) {
         int maxCommonLengthPossible = Math.min(length(), other.length());
         for (int i = 0; i < maxCommonLengthPossible; i++) {
@@ -87,6 +101,7 @@ public class FastTrieKeySlice {
                 return slice(0, i);
             }
         }
+
 
         return slice(0, maxCommonLengthPossible);
     }
@@ -160,8 +175,13 @@ public class FastTrieKeySlice {
         return new FastTrieKeySlice(expandedKey, 0, expandedKey.length);
     }
 
-    // Start aways with a vector with enough capacity to append keys
+    static FastTrieKeySlice emptyTrie = new FastTrieKeySlice(new byte[0], 0, 0);
     public static FastTrieKeySlice empty() {
+        return emptyTrie;
+    }
+
+    // Start aways with a vector with enough capacity to append keys
+    public static FastTrieKeySlice emptyWithCapacity() {
         int maxSize = (1+30+1+42)*8;
         return new FastTrieKeySlice(new byte[maxSize], 0, 0);
     }

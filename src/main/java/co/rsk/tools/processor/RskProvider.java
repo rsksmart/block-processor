@@ -9,6 +9,7 @@ import co.rsk.crypto.Keccak256;
 import co.rsk.trie.Trie;
 import org.ethereum.core.AccountState;
 import org.ethereum.core.Block;
+import org.ethereum.crypto.signature.Secp256k1;
 import org.ethereum.db.TrieKeyMapper;
 import org.ethereum.vm.DataWord;
 import org.ethereum.vm.PrecompiledContracts;
@@ -18,7 +19,7 @@ import java.math.BigInteger;
 import java.util.Optional;
 
 public class RskProvider {
-    static String foreDatabaseDir = "";
+    static String foreDatabaseDir = "C:\\Shared\\database\\mainnet";
     public static final String REMASC_BURNED_BALANCE_KEY = "burnedBalance";
     public static final Coin TOTAL_SUPPLY = new Coin(new BigInteger("21000000000000000000000000"));
     public static final BigDecimal WEI = new BigDecimal("1e18");
@@ -32,6 +33,8 @@ public class RskProvider {
 
     public RskProvider(String rskArgs[]) {
         this.ctx = new RskContext(rskArgs);
+        Secp256k1.getInstance();
+        ctx.getRskSystemProperties();
         init(ctx.getBlockStore().getMinNumber(), ctx.getBlockStore().getMaxNumber(),1);
     }
 
