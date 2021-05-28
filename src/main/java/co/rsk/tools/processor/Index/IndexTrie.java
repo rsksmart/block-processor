@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package co.rsk.tools.processor.examples;
+package co.rsk.tools.processor.Index;
 
 import co.rsk.metrics.profilers.Metric;
 import co.rsk.metrics.profilers.Profiler;
@@ -43,45 +43,28 @@ import java.util.*;
  * An empty node has no subnodes and a null value
  */
 public class IndexTrie {
-    static final int nullValue = -1;
+    static public final int nullValue = -1;
 
     private static final Profiler profiler = ProfilerFactory.getInstance();
-
-    protected final IndexTrie left;
-    protected final IndexTrie right;
-    protected final int value;
+    protected static IndexTrie emptyTrie = new IndexTrie();
 
     static IndexTrie empty() {
-        return null; //new IndexTrie();
+        return emptyTrie ;
     }
 
     public IndexTrie() {
-        this( nullValue);
-    }
-
-    private IndexTrie( int value) {
-        this(  value, null, null);
     }
 
     public boolean equals(Object obj) {
         IndexTrie t2 = (IndexTrie) obj;
 
-        if (t2.value!=this.value) return false;
+        //if (t2.value!=this.getValue()) return false;
         throw new RuntimeException("yet unsupported here");
         /*if (!t2.sharedPath.equalPath(this.sharedPath)) {
             return false;
         }
         return true;
         */
-
-    }
-
-    // full constructor
-    protected IndexTrie( int value, IndexTrie left, IndexTrie right) {
-
-        this.value = value;
-        this.right = right;
-        this.left = left;
 
     }
 
@@ -196,7 +179,7 @@ public class IndexTrie {
         }
 
         boolean shouldCollect = collectKeyLen == Integer.MAX_VALUE || key.length() == collectKeyLen;
-        if (value >= 0 && shouldCollect) {
+        if (getValue() >= 0 && shouldCollect) {
             // convert bit string into byte[]
             set.add(new ByteArrayWrapper(key.encode()));
         }
@@ -239,12 +222,12 @@ public class IndexTrie {
      *
      * @return the number of tries nodes, includes the current one
      */
-    public int trieSize() {
+    public int nodeCount() {
         int r =1;
-        if (left!=null)
-            r += this.left.trieSize();
-        if (right!=null)
-            r+= this.right.trieSize();
+        if (getLeft()!=null)
+            r += this.getLeft().nodeCount();
+        if (getRight()!=null)
+            r+= this.getRight().nodeCount();
         return r;
     }
 
@@ -252,33 +235,38 @@ public class IndexTrie {
         int r =0;
         if (!hasPath())
             r ++;
-        if (left!=null)
-            r += this.left.noPathCount();
-        if (right!=null)
-            r+= this.right.noPathCount();
+        if (getLeft()!=null)
+            r += this.getLeft().noPathCount();
+        if (getRight()!=null)
+            r+= this.getRight().noPathCount();
         return r;
     }
 
     public int NPCount() {
         int r =0;
-        if (this instanceof IndexTriePN)
+        boolean isIndexTriePN =this instanceof IndexTrieCP;
+        if(hasPath() && (!isIndexTriePN)) {
+            r=r;
+        }
+
+        if (isIndexTriePN)
             r++;
-        if (left!=null)
-            r += this.left.NPCount();
-        if (right!=null)
-            r+= this.right.NPCount();
+        if (getLeft()!=null)
+            r += this.getLeft().NPCount();
+        if (getRight()!=null)
+            r+= this.getRight().NPCount();
         return r;
     }
 
 
     public int dataCount() {
         int r =0;
-        if (value!=nullValue)
+        if (getValue()!=nullValue)
             r++;
-        if (left!=null)
-            r += this.left.dataCount();
-        if (right!=null)
-            r+= this.right.dataCount();
+        if (getLeft()!=null)
+            r += this.getLeft().dataCount();
+        if (getRight()!=null)
+            r+= this.getRight().dataCount();
         return r;
     }
 
@@ -321,24 +309,22 @@ public class IndexTrie {
     }
 
     public IndexTrie getNodeReference(byte implicitByte) {
-        return implicitByte == 0 ? this.left : this.right;
+        return implicitByte == 0 ? this.getLeft() : this.getRight();
     }
 
-    public IndexTrie getLeft() {
-        return left;
+     public IndexTrie getLeft() {
+        return null;
     }
 
     public IndexTrie getRight() {
-        return right;
+        return null;
     }
 
-
-
-    static IndexTrie coalesce(IndexTrie trie) {
+     static IndexTrie coalesce(IndexTrie trie) {
         // the following code coalesces nodes if needed for delete operation
 
         // it's null or it is not a delete operation
-        if (trie == null || trie.value >=0) {
+        if (trie == null || trie.getValue() >=0) {
             return trie;
         }
 
@@ -347,38 +333,53 @@ public class IndexTrie {
         }
 
         // only coalesce if node has only one child and no value
-        if (trie.value>=0) {
+        if (trie.getValue()>=0) {
             return trie;
         }
 
-        if (trie.left!=null  && trie.right!=null) {
+        if (trie.getLeft()!=null  && trie.getRight()!=null) {
             return trie;
         }
 
-        if (trie.left==null && trie.right==null) {
+        if (trie.getLeft()==null && trie.getRight()==null) {
             return trie;
         }
 
         IndexTrie child;
         byte childImplicitByte;
-        if (trie.left!=null) {
-            child = trie.left;
+        if (trie.getLeft()!=null) {
+            child = trie.getLeft();
             childImplicitByte = (byte) 0;
         } else { // has right node
-            child = trie.right;
+            child = trie.getRight();
             childImplicitByte = (byte) 1;
         }
 
         CompactTrieKeySlice newSharedPath = trie.getSharedPath().rebuildSharedPath(childImplicitByte, child.getSharedPath());
-        return newIndexTrie(newSharedPath, child.value, child.left, child.right);
+        return newIndexTrie(newSharedPath, child.getValue(), child.getLeft(), child.getRight());
     }
 
-    public static IndexTrie newIndexTrie( CompactTrieKeySlice newSharedPath,int value, IndexTrie left, IndexTrie right) {
-        if (newSharedPath.length() == 0)
-            return new IndexTrie(value, left, right);
+    public static IndexTrie newIndexTrie( CompactTrieKeySlice newSharedPath,
+                                       int value,IndexTrie left,IndexTrie right) {
+        int pathLength = newSharedPath.length();
+        boolean hasChildren =(left != null) || (right != null);
+        if ((!hasChildren) && (pathLength==0) && (value!=nullValue))
+            return new IndexTrieV(value);
         else
-            return new IndexTriePN(newSharedPath,value, left, right);
+        if ((pathLength != 0) && (value!=nullValue))
+            return new IndexTriePV(newSharedPath,value);
+        else
+        if ((hasChildren) && (pathLength!=0) && (value==nullValue))
+            return new IndexTrieCP(newSharedPath,left, right);
+        else
+        if ((!hasChildren) && (pathLength==0) && (value==nullValue))
+            return new IndexTrie();
+            else
+        //if ((pathLength != 0) || (value!=nullValue))
+            return new IndexTrieCPV(newSharedPath,value, left, right);
+
     }
+    
     /**
      * put key with associated value, returning a new NewTrie
      *
@@ -424,15 +425,15 @@ public class IndexTrie {
                 return newIndexTrie(sharedPath, nullValue,null,null);
             }
 
-            if (isEmptyTrie(value, this.left, this.right)) {
+            if (isEmptyTrie(value, this.getLeft(), this.getRight())) {
                 return null;
             }
 
             return newIndexTrie(
                     sharedPath,
                     value,
-                    this.left,
-                    this.right
+                    this.getLeft(),
+                    this.getRight()
             );
         }
 
@@ -460,24 +461,24 @@ public class IndexTrie {
         IndexTrie newRight;
         if (pos == 0) {
             newLeft = newNode;
-            newRight = this.right;
+            newRight = this.getRight();
         } else {
-            newLeft = this.left;
+            newLeft = this.getLeft();
             newRight = newNode;
         }
 
-        if (isEmptyTrie(this.value, newLeft, newRight)) {
+        if (isEmptyTrie(this.getValue(), newLeft, newRight)) {
             return null;
         }
 
-        return newIndexTrie(sharedPath, this.value, newLeft, newRight);
+        return newIndexTrie(sharedPath, this.getValue(), newLeft, newRight);
     }
 
     private IndexTrie split(CompactTrieKeySlice commonPath) {
         CompactTrieKeySlice sharedPath = getSharedPath();
         int commonPathLength = commonPath.length();
         CompactTrieKeySlice newChildSharedPath = sharedPath.slice(commonPathLength + 1, sharedPath.length());
-        IndexTrie newChildTrie = newIndexTrie(newChildSharedPath, this.value, this.left, this.right);
+        IndexTrie newChildTrie = newIndexTrie(newChildSharedPath, this.getValue(), this.getLeft(), this.getRight());
 
         // this bit will be implicit and not present in a shared path
         byte pos = sharedPath.get(commonPathLength);
@@ -496,21 +497,21 @@ public class IndexTrie {
     }
 
     public boolean isTerminal() {
-        return this.left.isEmpty() && this.right.isEmpty();
+        return this.getLeft().isEmpty() && this.getRight().isEmpty();
     }
 
     public boolean isEmpty() {
-        return isEmptyTrie(this.value, this.left, this.right);
+        return isEmptyTrie(this.getValue(), this.getLeft(), this.getRight());
     }
 
     public boolean isEmptyTrie() {
-        return isEmptyTrie(this.value, this.left, this.right);
+        return isEmptyTrie(this.getValue(), this.getLeft(), this.getRight());
     }
 
     private static boolean isEmptyTrieRecursive(IndexTrie node) {
         if (node==null)
             return true;
-        return (isEmptyTrieRecursive(node.value,node.left,node.right));
+        return (isEmptyTrieRecursive(node.getValue(),node.getLeft(),node.getRight()));
     }
     /**
      * isEmptyTrie checks the existence of subnodes, subnodes hashes or value
@@ -544,7 +545,7 @@ public class IndexTrie {
     }
 
     public int getValue() {
-        return value;
+        return nullValue;
     }
 
     public CompactTrieKeySlice getSharedPath() {
@@ -569,11 +570,11 @@ public class IndexTrie {
     /*
     @Override
     public int hashCode() {
-        return Objects.hashCode(getHash());
+        return AbstractIndexTries.hashCode(getHash());
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(IndexTrie other) {
         if (this == other) {
             return true;
         }

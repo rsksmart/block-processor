@@ -1,4 +1,4 @@
-package co.rsk.tools.processor.examples;
+package co.rsk.tools.processor.cindex;
 
 import java.util.Arrays;
 
@@ -71,8 +71,8 @@ public class PathEncoder {
         }*/
         byte[] recoded = new byte[(destBitLength+7)/8];
         recodeBinaryPathFromTo(
-         encoded, soffset, bitlength,
-         recoded,0);
+         encoded, 0,soffset, bitlength,
+         recoded,0,0);
         return recoded;
     }
 
@@ -89,14 +89,20 @@ public class PathEncoder {
             // length is the length in bits. For example ({1},8) is fine
     // First bit is MOST SIGNIFICANT
     public static void recodeBinaryPathFromTo(
-            byte[] encoded, int soffset,int bitlength,
-            byte[] recoded,int toffset) {
+            byte[] encoded,
+            int sByteOffset,
+            int soffset,
+            int bitlength,
+            byte[] recoded,
+            int tByteOffset,
+            int toffset) {
 
         for (int k = 0; k < bitlength; k++) {
-            int nbyte = (soffset+k) / 8;
+            int nbyte = sByteOffset+(soffset+k) / 8;
             int offset = (soffset+k) % 8;
+
+            int dnbyte  = tByteOffset+(toffset+k) / 8;
             int doffset = (toffset+k) % 8;
-            int dnbyte  = (toffset+k) / 8;
             if (((encoded[nbyte] >> (7 - offset)) & 0x01) != 0) {
                 recoded[dnbyte] |= 0x80 >> doffset;
             }

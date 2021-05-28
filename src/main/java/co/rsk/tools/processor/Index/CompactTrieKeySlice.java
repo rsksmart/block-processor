@@ -1,7 +1,6 @@
-package co.rsk.tools.processor.examples;
+package co.rsk.tools.processor.Index;
 
 //import co.rsk.trie.PathEncoder;
-import co.rsk.tools.processor.examples.PathEncoder;
 
 import java.util.Arrays;
 
@@ -110,11 +109,11 @@ public class CompactTrieKeySlice {
 
         byte[] newcompactKey = new byte[(newLength+7)/8];
         PathEncoder.recodeBinaryPathFromTo(
-                this.compactKey,this.offset,this.length(),
-                newcompactKey,0);
+                this.compactKey,0,this.offset,this.length(),
+                newcompactKey,0,0);
         PathEncoder.recodeBinaryPathFromTo(
-                childSharedPath.compactKey,childSharedPath.offset,childSharedPath.length(),
-                newcompactKey,length);
+                childSharedPath.compactKey,0,childSharedPath.offset,childSharedPath.length(),
+                newcompactKey,0,length);
 
         return new CompactTrieKeySlice(newcompactKey, 0, newLength);
     }
@@ -128,11 +127,11 @@ public class CompactTrieKeySlice {
         int newLength = length + 1 + childSharedPathLength;
         byte[] newcompactKey = new byte[(newLength+7)/8];
         PathEncoder.recodeBinaryPathFromTo(
-                this.compactKey,this.offset,this.length(),
-                newcompactKey,0);
+                this.compactKey,0,this.offset,this.length(),
+                newcompactKey,0,0);
         PathEncoder.recodeBinaryPathFromTo(
-                childSharedPath.compactKey,childSharedPath.offset,childSharedPath.length(),
-                newcompactKey,length+1);
+                childSharedPath.compactKey,0,childSharedPath.offset,childSharedPath.length(),
+                newcompactKey,0,length+1);
         PathEncoder.encodeBit(newcompactKey,length,implicitByte);
 
         return new CompactTrieKeySlice(newcompactKey, 0, newLength);
@@ -146,8 +145,8 @@ public class CompactTrieKeySlice {
         int newLength= currentLength + paddingLength;
         byte[] paddedcompactKey = new byte[(newLength+7)/8];
         PathEncoder.recodeBinaryPathFromTo(
-                this.compactKey,this.offset,this.length(),
-                paddedcompactKey,paddingLength);
+                this.compactKey,0,this.offset,this.length(),
+                paddedcompactKey,0,paddingLength);
         return new CompactTrieKeySlice(paddedcompactKey, 0, newLength);
     }
 

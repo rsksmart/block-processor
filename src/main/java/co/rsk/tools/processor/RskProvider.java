@@ -7,6 +7,7 @@ import co.rsk.core.Coin;
 import co.rsk.core.RskAddress;
 import co.rsk.crypto.Keccak256;
 import co.rsk.trie.Trie;
+import org.ethereum.config.SystemProperties;
 import org.ethereum.core.AccountState;
 import org.ethereum.core.Block;
 import org.ethereum.crypto.signature.Secp256k1;
@@ -19,7 +20,7 @@ import java.math.BigInteger;
 import java.util.Optional;
 
 public class RskProvider {
-    static String foreDatabaseDir = "C:\\Shared\\database\\mainnet";
+    static String foreDatabaseDir = ""; // "C:\\Shared\\database\\mainnet";
     public static final String REMASC_BURNED_BALANCE_KEY = "burnedBalance";
     public static final Coin TOTAL_SUPPLY = new Coin(new BigInteger("21000000000000000000000000"));
     public static final BigDecimal WEI = new BigDecimal("1e18");
@@ -30,6 +31,10 @@ public class RskProvider {
     private long minBlock;
     private long maxBlock;
     private long step;
+
+    public RskContext getContext() {
+        return ctx;
+    }
 
     public RskProvider(String rskArgs[]) {
         this.ctx = new RskContext(rskArgs);
@@ -66,6 +71,23 @@ public class RskProvider {
     public static BigDecimal toBTC(Coin wei) {
         return new BigDecimal(wei.asBigInteger()).divide(RskProvider.WEI);
     }
+    public  String networkName;
+
+    public String getNetworkName() {
+        return networkName;
+    }
+    public void setNetworkName() {
+        //networkName = ctx.getRskSystemProperties().getConfig().getString(SystemProperties.PROPERTY_BC_CONFIG_NAME);
+        Block blk = ctx.getBlockStore().getChainBlockByNumber(0);
+        System.out.println("block "+blk.getHash().toHexString());
+        if (blk.getHash().toHexString().equals("cabb7fbe88cd6d922042a32ffc08ce8b1fbb37d650b9d4e7dbfe2a7469adfa42")) {
+            networkName = "testnet";
+        } else
+        if (blk.getHash().toHexString().equals("f88529d4ab262c0f4d042e9d8d3f2472848eaafe1a9b7213f57617eb40a9f9e0"))
+            networkName = "mainnet";
+        else
+            networkName = "unknown";
+    }
 
     private void init(long minBlock, long maxBlock, long step) {
         this.trieKeyMapper = new TrieKeyMapper();
@@ -73,6 +95,7 @@ public class RskProvider {
         this.maxBlock = Long.min(ctx.getBlockStore().getMaxNumber(), maxBlock);
         this.step = step;
         this.trie = null; // no need to load it in advance
+        setNetworkName();
     }
 
     public void loadTrie() {
@@ -83,11 +106,11 @@ public class RskProvider {
         blockProcessor.setContext(ctx);
         blockProcessor.begin();
         long prevPercent =0;
-        System.out.println("Processing started");
+        System.out.println("Processing started at block: "+minBlock);
         for (long blockNumber = minBlock; blockNumber < maxBlock; blockNumber +=step) {
             blockProcessor.setState(blockNumber);
             this.trie =blockProcessor.trie;
-            long percent = (blockNumber-minBlock)*100/(maxBlock-minBlock);
+             long percent = (blockNumber-minBlock)*100/(maxBlock-minBlock);
             if (percent>prevPercent) {
                 System.out.println("Processing: "+blockNumber+" ("+percent+"%)");
                 prevPercent = percent;

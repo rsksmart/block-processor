@@ -267,14 +267,24 @@ public class StorageAnalyzer  extends RskBlockProcessor {
         return TrieKeySlice.fromEncoded(encoded,0,newKey.length, encoded.length);
         // This is private !!!! return new TrieKeySlice(newKey,0,newKey.length);
     }
+    public static byte[] hexStringToByteArray(String s) {
+        int len = s.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(s.charAt(i), 16) << 4)
+                    + Character.digit(s.charAt(i+1), 16));
+        }
+        return data;
+    }
     long prevTime;
+    static byte[] aPath =hexStringToByteArray("00a1c67f69a80032a500252acc95758f8b5f583470ba265eb685a8f45fc9d580");
+
     private void processTrie(Trie trie,FastTrieKeySlice parentKey,
                                     NodeType previousNodeType,
                                     NodeType nodeType,
                                     ProcessTrieResults results,
                              boolean isEmbedded,
                              RskAddress addr) {
-
         results.virtualNodes++;
         if (results.virtualNodes%1000==0) {
             System.out.println("Nodes processed: "+results.virtualNodes);
@@ -475,7 +485,7 @@ public class StorageAnalyzer  extends RskBlockProcessor {
 
     public static void main (String args[]) {
         int maxBlockchainBlock = 3_210_000; // 3219985
-        int minBlock = maxBlockchainBlock;///1_600_001; //2_400_001;
+        int minBlock = 1053684-1;//maxBlockchainBlock;///1_600_001; //2_400_001;
         int maxBlock = minBlock+1; // maxBlockchainBlock;
         int step = 800_000;
         RskProvider provider = new RskProvider(args,minBlock,maxBlock,step);
