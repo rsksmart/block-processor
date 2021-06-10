@@ -1,4 +1,4 @@
-package co.rsk.tools.processor.examples;
+package co.rsk.tools.processor.examples.storage;
 
 /*
  * This file is part of RskJ
@@ -21,7 +21,6 @@ package co.rsk.tools.processor.examples;
 
 import co.rsk.trie.PathEncoder;
 
-import javax.swing.*;
 import java.util.Arrays;
 
 /**

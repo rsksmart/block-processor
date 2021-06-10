@@ -11,6 +11,7 @@ import co.rsk.crypto.Keccak256;
 import co.rsk.remasc.RemascTransaction;
 import co.rsk.tools.processor.RskBlockProcessor;
 import co.rsk.tools.processor.RskProvider;
+import co.rsk.tools.processor.examples.storage.FastTrieKeySlice;
 import co.rsk.trie.NodeReference;
 import co.rsk.trie.PathEncoder;
 import co.rsk.trie.Trie;

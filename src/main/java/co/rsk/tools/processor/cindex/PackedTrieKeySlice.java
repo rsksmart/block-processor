@@ -3,10 +3,6 @@ package co.rsk.tools.processor.cindex;
 
 //import co.rsk.trie.PathEncoder;
 
-import co.rsk.tools.processor.examples.ObjectIO;
-
-import java.util.Arrays;
-
 public class PackedTrieKeySlice  {
     // Always store in maximally expanded format
     private static final int pkIndex = 2;

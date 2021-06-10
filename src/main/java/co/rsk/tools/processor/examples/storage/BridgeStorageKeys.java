@@ -1,4 +1,4 @@
-package co.rsk.tools.processor.examples;
+package co.rsk.tools.processor.examples.storage;
 
 import org.ethereum.vm.DataWord;
 
