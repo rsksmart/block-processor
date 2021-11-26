@@ -79,7 +79,7 @@ public class RskProvider {
         blockProcessor.setContext(ctx);
         blockProcessor.begin();
         long prevPercent =0;
-        System.out.println("Processing started");
+        System.out.println("Processing started at block: "+minBlock);
         for (long blockNumber = minBlock; blockNumber < maxBlock; blockNumber +=step) {
             blockProcessor.setState(blockNumber);
             this.trie =blockProcessor.trie;
