@@ -22,6 +22,9 @@ public abstract class RskBlockProcessor {
         return trie;
     }
 
+    public void setLoadTrieForEachBlock(boolean v) {
+        loadTrieForEachBlock = v;
+    }
     public void begin() {
     }
 
