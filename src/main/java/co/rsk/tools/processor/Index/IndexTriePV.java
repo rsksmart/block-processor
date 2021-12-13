@@ -1,14 +1,14 @@
 package co.rsk.tools.processor.Index;
 
 public class IndexTriePV  extends IndexTrie {
-    protected final CompactTrieKeySlice sharedPath;
+    protected final TrieKeySlice sharedPath;
     protected final int value;
 
     public IndexTriePV() {
-        this( CompactTrieKeySlice.empty(), nullValue);
+        this( trieKeySliceFactory.empty(), nullValue);
     }
 
-    public IndexTriePV(CompactTrieKeySlice sharedPath, int value) {
+    public IndexTriePV(TrieKeySlice sharedPath, int value) {
 
         this.sharedPath = sharedPath;
         if (sharedPath.length()==0)
@@ -16,7 +16,7 @@ public class IndexTriePV  extends IndexTrie {
         this.value = value;
     }
 
-    public CompactTrieKeySlice getSharedPath() {
+    public TrieKeySlice getSharedPath() {
         return sharedPath;
     }
 

@@ -220,7 +220,8 @@ public class StorageDumperToFile extends RskBlockProcessor {
     public static void main (String args[]) {
 
         StorageDumperToFile sl = new StorageDumperToFile();
-        sl.DumpTrie(2_999_999,"3M",args);
+        //sl.DumpTrie(2_999_999,"3M",args);
+        sl.DumpTrie(2_799_999,"2.8M",args);
         System.exit(0);
 
         int defaultRange = 100;

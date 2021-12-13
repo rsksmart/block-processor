@@ -16,8 +16,9 @@ public class AbstractIndexTrie {
         return 0;
     }
 
-    public CompactTrieKeySlice getSharedPath() {
-        return CompactTrieKeySlice.empty();
+    public static CompactTrieKeySlice getSharedPath() {
+        return (CompactTrieKeySlice) CompactTrieKeySlice.emptyStatic();
+        //return (CompactTrieKeySlice) empty();
     }
 
     public Set<ByteArrayWrapper> collectKeys(int byteSize) {

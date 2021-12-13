@@ -21,7 +21,6 @@ import co.rsk.metrics.profilers.Metric;
 import co.rsk.metrics.profilers.Profiler;
 import co.rsk.metrics.profilers.ProfilerFactory;
 import org.ethereum.db.ByteArrayWrapper;
-import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -80,7 +79,7 @@ public class IndexTrie {
      *
      * @return  the associated value, a byte array, or null if there is no associated value to the key
      */
-    @Nullable
+
     public int get(byte[] key) {
         Metric metric = profiler.start(Profiler.PROFILING_TYPE.TRIE_GET_VALUE_FROM_KEY);
         IndexTrie node = find(key);
@@ -277,13 +276,13 @@ public class IndexTrie {
      * @return the associated value, null if the key is not found
      *
      */
-    @Nullable
+
     public IndexTrie find(byte[] key) {
         return internalFind(PackedTrieKeySlice.fromKey(key));
     }
 
 
-    @Nullable
+
     private IndexTrie internalFind(byte[] packedKey) {
         byte[] sharedPath = getSharedPath();
         byte[] commonPath = PackedTrieKeySlice.commonPath(packedKey,sharedPath);
@@ -812,22 +811,22 @@ public class IndexTrie {
 
     // Additional auxiliary methods for Merkle Proof
 
-    @Nullable
+
     public List<IndexTrie> getNodes(byte[] key) {
         return findNodesPlainKey(key);
     }
 
-    @Nullable
+
     public List<IndexTrie> getNodes(String key) {
         return this.getNodes(key.getBytes(StandardCharsets.UTF_8));
     }
 
-    @Nullable
+
     private List<IndexTrie> findNodesPlainKey(byte[] key) {
         return findNodes(PackedTrieKeySlice.fromKey(key));
     }
 
-    @Nullable
+
     private List<IndexTrie> findNodes(byte[] key) {
         byte[] sharedPath = getSharedPath();
         if (PackedTrieKeySlice.length(sharedPath) > PackedTrieKeySlice.length(key)) {

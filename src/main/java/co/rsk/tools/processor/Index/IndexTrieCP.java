@@ -2,20 +2,20 @@ package co.rsk.tools.processor.Index;
 
 public class IndexTrieCP extends IndexTrie {
 
-    protected final CompactTrieKeySlice sharedPath;
+    protected final TrieKeySlice sharedPath;
     protected final IndexTrie left;
     protected final IndexTrie right;
 
     public IndexTrieCP() {
-        this( CompactTrieKeySlice.empty());
+        this( trieKeySliceFactory.empty());
     }
 
-    private IndexTrieCP(CompactTrieKeySlice sharedPath) {
+    private IndexTrieCP(TrieKeySlice sharedPath) {
         this( sharedPath, null, null);
     }
 
     // full constructor
-    protected IndexTrieCP(CompactTrieKeySlice sharedPath,
+    protected IndexTrieCP(TrieKeySlice sharedPath,
                           IndexTrie left, IndexTrie right) {
         this.sharedPath = sharedPath;
         if (sharedPath.length()==0)
@@ -25,7 +25,7 @@ public class IndexTrieCP extends IndexTrie {
     }
 
 
-    public CompactTrieKeySlice getSharedPath() {
+    public TrieKeySlice getSharedPath() {
         return sharedPath;
     }
     public boolean hasPath() {

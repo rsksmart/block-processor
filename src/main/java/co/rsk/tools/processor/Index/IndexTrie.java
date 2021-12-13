@@ -21,9 +21,6 @@ import co.rsk.metrics.profilers.Metric;
 import co.rsk.metrics.profilers.Profiler;
 import co.rsk.metrics.profilers.ProfilerFactory;
 import org.ethereum.db.ByteArrayWrapper;
-//import co.rsk.trie.CompactTrieKeySlice;
-import org.jetbrains.annotations.Nullable;
-
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -47,6 +44,7 @@ public class IndexTrie {
 
     private static final Profiler profiler = ProfilerFactory.getInstance();
     protected static IndexTrie emptyTrie = new IndexTrie();
+    protected static TrieKeySliceFactory trieKeySliceFactory = (TrieKeySliceFactory) CompactTrieKeySlice.getFactory();
 
     static IndexTrie empty() {
         return emptyTrie ;
@@ -81,7 +79,7 @@ public class IndexTrie {
      *
      * @return  the associated value, a byte array, or null if there is no associated value to the key
      */
-    @Nullable
+
     public int get(byte[] key) {
         Metric metric = profiler.start(Profiler.PROFILING_TYPE.TRIE_GET_VALUE_FROM_KEY);
         IndexTrie node = find(key);
@@ -116,7 +114,7 @@ public class IndexTrie {
      * is build, adding some new nodes
      */
     public IndexTrie put(byte[] key, int value) {
-        CompactTrieKeySlice keySlice = CompactTrieKeySlice.fromKey(key);
+        TrieKeySlice keySlice = trieKeySliceFactory.fromKey(key);
         IndexTrie trie = put(keySlice, value, false);
 
         return trie == null ? new IndexTrie() : trie;
@@ -153,7 +151,7 @@ public class IndexTrie {
 
     // This is O(1). The node with exact key "key" MUST exists.
     public IndexTrie deleteRecursive(byte[] key) {
-        CompactTrieKeySlice keySlice = CompactTrieKeySlice.fromKey(key);
+        TrieKeySlice keySlice = trieKeySliceFactory.fromKey(key);
         IndexTrie trie = put(keySlice, nullValue, true);
 
         return trie == null ? new IndexTrie() : trie;
@@ -173,7 +171,7 @@ public class IndexTrie {
     // key is the key with exactly collectKeyLen bytes.
     // in non-expanded form (binary)
     // special value Integer.MAX_VALUE means collect them all.
-    private void collectKeys(Set<ByteArrayWrapper> set, CompactTrieKeySlice key, int collectKeyLen) {
+    private void collectKeys(Set<ByteArrayWrapper> set, TrieKeySlice key, int collectKeyLen) {
         if (collectKeyLen != Integer.MAX_VALUE && key.length() > collectKeyLen) {
             return;
         }
@@ -191,7 +189,7 @@ public class IndexTrie {
                 continue;
             }
 
-            CompactTrieKeySlice nodeKey = key.rebuildSharedPath(k, node.getSharedPath());
+            TrieKeySlice nodeKey = key.rebuildSharedPath(k, node.getSharedPath());
             node.collectKeys(set, nodeKey, collectKeyLen);
         }
     }
@@ -277,15 +275,15 @@ public class IndexTrie {
      * @return the associated value, null if the key is not found
      *
      */
-    @Nullable
+
     public IndexTrie find(byte[] key) {
-        return find(CompactTrieKeySlice.fromKey(key));
+        return find(trieKeySliceFactory.fromKey(key));
     }
 
 
-    @Nullable
-    private IndexTrie find(CompactTrieKeySlice key) {
-        CompactTrieKeySlice sharedPath = getSharedPath();
+
+    private IndexTrie find(TrieKeySlice key) {
+        TrieKeySlice sharedPath = getSharedPath();
         int commonPathLength = key.commonPath(sharedPath).length();
         if (commonPathLength < sharedPath.length()) {
             return null;
@@ -355,11 +353,11 @@ public class IndexTrie {
             childImplicitByte = (byte) 1;
         }
 
-        CompactTrieKeySlice newSharedPath = trie.getSharedPath().rebuildSharedPath(childImplicitByte, child.getSharedPath());
+        TrieKeySlice newSharedPath = trie.getSharedPath().rebuildSharedPath(childImplicitByte, child.getSharedPath());
         return newIndexTrie(newSharedPath, child.getValue(), child.getLeft(), child.getRight());
     }
 
-    public static IndexTrie newIndexTrie( CompactTrieKeySlice newSharedPath,
+    public static IndexTrie newIndexTrie( TrieKeySlice newSharedPath,
                                        int value,IndexTrie left,IndexTrie right) {
         int pathLength = newSharedPath.length();
         boolean hasChildren =(left != null) || (right != null);
@@ -389,7 +387,7 @@ public class IndexTrie {
      * @return the new NewTrie containing the tree with the new key value association
      *
      */
-    private IndexTrie put(CompactTrieKeySlice key, int value, boolean isRecursiveDelete) {
+    private IndexTrie put(TrieKeySlice key, int value, boolean isRecursiveDelete) {
 
         IndexTrie trie = this.internalPut(key, value, isRecursiveDelete);
 
@@ -400,9 +398,9 @@ public class IndexTrie {
 
     }
 
-    private IndexTrie internalPut(CompactTrieKeySlice key, int value, boolean isRecursiveDelete) {
-        CompactTrieKeySlice sharedPath = getSharedPath();
-        CompactTrieKeySlice commonPath = key.commonPath(sharedPath);
+    private IndexTrie internalPut(TrieKeySlice key, int value, boolean isRecursiveDelete) {
+        TrieKeySlice sharedPath = getSharedPath();
+        TrieKeySlice commonPath = key.commonPath(sharedPath);
         if (commonPath.length() < sharedPath.length()) {
             // when we are removing a key we know splitting is not necessary. the key wasn't found at this point.
             if (value <0) {
@@ -449,7 +447,7 @@ public class IndexTrie {
             node = new IndexTrie();
         }
 
-        CompactTrieKeySlice subKey = key.slice(sharedPath.length() + 1, key.length());
+        TrieKeySlice subKey = key.slice(sharedPath.length() + 1, key.length());
         IndexTrie newNode = node.put(subKey, value, isRecursiveDelete);
 
         // reference equality
@@ -474,10 +472,10 @@ public class IndexTrie {
         return newIndexTrie(sharedPath, this.getValue(), newLeft, newRight);
     }
 
-    private IndexTrie split(CompactTrieKeySlice commonPath) {
-        CompactTrieKeySlice sharedPath = getSharedPath();
+    private IndexTrie split(TrieKeySlice commonPath) {
+        TrieKeySlice sharedPath = getSharedPath();
         int commonPathLength = commonPath.length();
-        CompactTrieKeySlice newChildSharedPath = sharedPath.slice(commonPathLength + 1, sharedPath.length());
+        TrieKeySlice newChildSharedPath = sharedPath.slice(commonPathLength + 1, sharedPath.length());
         IndexTrie newChildTrie = newIndexTrie(newChildSharedPath, this.getValue(), this.getLeft(), this.getRight());
 
         // this bit will be implicit and not present in a shared path
@@ -548,8 +546,8 @@ public class IndexTrie {
         return nullValue;
     }
 
-    public CompactTrieKeySlice getSharedPath() {
-        return CompactTrieKeySlice.empty();
+    public TrieKeySlice getSharedPath() {
+        return trieKeySliceFactory.empty();
     }
 
     public Iterator<IterationElement> getInOrderIterator() {
@@ -607,7 +605,7 @@ public class IndexTrie {
 
         public InOrderIterator(IndexTrie root) {
             Objects.requireNonNull(root);
-            CompactTrieKeySlice traversedPath = root.getSharedPath();
+            TrieKeySlice traversedPath = root.getSharedPath();
             this.visiting = new LinkedList<>();
             // find the leftmost node, pushing all the intermediate nodes onto the visiting stack
             visiting.push(new IterationElement(traversedPath, root));
@@ -626,7 +624,7 @@ public class IndexTrie {
             // if the node has a right child, its leftmost node is next
             IndexTrie rightNode = node.retrieveNode((byte) 0x01);
             if (rightNode != null) {
-                CompactTrieKeySlice rightNodeKey = visitingElement.getNodeKey().rebuildSharedPath((byte) 0x01, rightNode.getSharedPath());
+                TrieKeySlice rightNodeKey = visitingElement.getNodeKey().rebuildSharedPath((byte) 0x01, rightNode.getSharedPath());
                 visiting.push(new IterationElement(rightNodeKey, rightNode)); // push the right node
                 // find the leftmost node of the right child
                 pushLeftmostNode(rightNodeKey, rightNode);
@@ -647,11 +645,11 @@ public class IndexTrie {
          * @param nodeKey
          * @param node the root of the subtree for which we are trying to reach the leftmost node
          */
-        private void pushLeftmostNode(CompactTrieKeySlice nodeKey, IndexTrie node) {
+        private void pushLeftmostNode(TrieKeySlice nodeKey, IndexTrie node) {
             // find the leftmost node
             IndexTrie leftNode = node.retrieveNode((byte) 0x00);
             if (leftNode != null) {
-                CompactTrieKeySlice leftNodeKey = nodeKey.rebuildSharedPath((byte) 0x00, leftNode.getSharedPath());
+                TrieKeySlice leftNodeKey = nodeKey.rebuildSharedPath((byte) 0x00, leftNode.getSharedPath());
                 visiting.push(new IterationElement(leftNodeKey, leftNode)); // push the left node
                 pushLeftmostNode(leftNodeKey, leftNode); // recurse on next left node
             }
@@ -664,7 +662,7 @@ public class IndexTrie {
 
         public PreOrderIterator(IndexTrie root) {
             Objects.requireNonNull(root);
-            CompactTrieKeySlice traversedPath = root.getSharedPath();
+            TrieKeySlice traversedPath = root.getSharedPath();
             this.visiting = new LinkedList<>();
             this.visiting.push(new IterationElement(traversedPath, root));
         }
@@ -674,17 +672,17 @@ public class IndexTrie {
         public IterationElement next() {
             IterationElement visitingElement = visiting.pop();
             IndexTrie node = visitingElement.getNode();
-            CompactTrieKeySlice nodeKey = visitingElement.getNodeKey();
+            TrieKeySlice nodeKey = visitingElement.getNodeKey();
             // need to visit the left subtree first, then the right since a stack is a LIFO, push the right subtree first,
             // then the left
             IndexTrie rightNode = node.retrieveNode((byte) 0x01);
             if (rightNode != null) {
-                CompactTrieKeySlice rightNodeKey = nodeKey.rebuildSharedPath((byte) 0x01, rightNode.getSharedPath());
+                TrieKeySlice rightNodeKey = nodeKey.rebuildSharedPath((byte) 0x01, rightNode.getSharedPath());
                 visiting.push(new IterationElement(rightNodeKey, rightNode));
             }
             IndexTrie leftNode = node.retrieveNode((byte) 0x00);
             if (leftNode != null) {
-                CompactTrieKeySlice leftNodeKey = nodeKey.rebuildSharedPath((byte) 0x00, leftNode.getSharedPath());
+                TrieKeySlice leftNodeKey = nodeKey.rebuildSharedPath((byte) 0x00, leftNode.getSharedPath());
                 visiting.push(new IterationElement(leftNodeKey, leftNode));
             }
             // may not have pushed anything.  If so, we are at the end
@@ -704,7 +702,7 @@ public class IndexTrie {
 
         public PostOrderIterator(IndexTrie root) {
             Objects.requireNonNull(root);
-            CompactTrieKeySlice traversedPath = root.getSharedPath();
+            TrieKeySlice traversedPath = root.getSharedPath();
             this.visiting = new LinkedList<>();
             this.visitingRightChild = new LinkedList<>();
             // find the leftmost node, pushing all the intermediate nodes onto the visiting stack
@@ -735,7 +733,7 @@ public class IndexTrie {
                 visitingRightChild.removeFirst();
                 visitingRightChild.push(Boolean.TRUE);
 
-                CompactTrieKeySlice rightNodeKey = visitingElement.getNodeKey().rebuildSharedPath((byte) 0x01, rightNode.getSharedPath());
+                TrieKeySlice rightNodeKey = visitingElement.getNodeKey().rebuildSharedPath((byte) 0x01, rightNode.getSharedPath());
                 visiting.push(new IterationElement(rightNodeKey, rightNode)); // push the right node
                 visitingRightChild.push(Boolean.FALSE); // we're visiting the left subtree of the right node
 
@@ -751,11 +749,11 @@ public class IndexTrie {
          * @param nodeKey
          * @param node the root of the subtree for which we are trying to reach the leftmost node
          */
-        private void pushLeftmostNodeRecord(CompactTrieKeySlice nodeKey, IndexTrie node) {
+        private void pushLeftmostNodeRecord(TrieKeySlice nodeKey, IndexTrie node) {
             // find the leftmost node
             IndexTrie leftNode = node.retrieveNode((byte) 0x00);
             if (leftNode != null) {
-                CompactTrieKeySlice leftNodeKey = nodeKey.rebuildSharedPath((byte) 0x00, leftNode.getSharedPath());
+                TrieKeySlice leftNodeKey = nodeKey.rebuildSharedPath((byte) 0x00, leftNode.getSharedPath());
                 visiting.push(new IterationElement(leftNodeKey, leftNode)); // push the left node
                 visitingRightChild.push(Boolean.FALSE); // record that it is on the left
                 pushLeftmostNodeRecord(leftNodeKey, leftNode); // continue looping
@@ -764,10 +762,10 @@ public class IndexTrie {
     }
 
     public static class IterationElement {
-        private final CompactTrieKeySlice nodeKey;
+        private final TrieKeySlice nodeKey;
         private final IndexTrie node;
 
-        public IterationElement(final CompactTrieKeySlice nodeKey, final IndexTrie node) {
+        public IterationElement(final TrieKeySlice nodeKey, final IndexTrie node) {
             this.nodeKey = nodeKey;
             this.node = node;
         }
@@ -776,7 +774,7 @@ public class IndexTrie {
             return node;
         }
 
-        public final CompactTrieKeySlice getNodeKey() {
+        public final TrieKeySlice getNodeKey() {
             return nodeKey;
         }
 
@@ -791,10 +789,10 @@ public class IndexTrie {
     }
 
     private static class SharedPathSerializer {
-        private final CompactTrieKeySlice sharedPath;
+        private final TrieKeySlice sharedPath;
         private final int lshared;
 
-        private SharedPathSerializer(CompactTrieKeySlice sharedPath) {
+        private SharedPathSerializer(TrieKeySlice sharedPath) {
             this.sharedPath = sharedPath;
             this.lshared = this.sharedPath.length();
         }
@@ -806,24 +804,24 @@ public class IndexTrie {
 
     // Additional auxiliary methods for Merkle Proof
 
-    @Nullable
+
     public List<IndexTrie> getNodes(byte[] key) {
         return findNodes(key);
     }
 
-    @Nullable
+
     public List<IndexTrie> getNodes(String key) {
         return this.getNodes(key.getBytes(StandardCharsets.UTF_8));
     }
 
-    @Nullable
+
     private List<IndexTrie> findNodes(byte[] key) {
-        return findNodes(CompactTrieKeySlice.fromKey(key));
+        return findNodes(trieKeySliceFactory.fromKey(key));
     }
 
-    @Nullable
-    private List<IndexTrie> findNodes(CompactTrieKeySlice key) {
-        CompactTrieKeySlice sharedPath = getSharedPath();
+
+    private List<IndexTrie> findNodes(TrieKeySlice key) {
+        TrieKeySlice sharedPath = getSharedPath();
         if (sharedPath.length() > key.length()) {
             return null;
         }

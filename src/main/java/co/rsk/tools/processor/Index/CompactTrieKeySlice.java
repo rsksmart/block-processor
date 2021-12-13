@@ -4,7 +4,7 @@ package co.rsk.tools.processor.Index;
 
 import java.util.Arrays;
 
-public class CompactTrieKeySlice {
+public class CompactTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
     // Always store in maximally expanded format
     private final byte[] compactKey;
     private final short offset;
@@ -16,7 +16,7 @@ public class CompactTrieKeySlice {
         this.limit = (short) limit;
     }
 
-    public CompactTrieKeySlice clone() {
+    public TrieKeySlice clone() {
         return new CompactTrieKeySlice(Arrays.copyOfRange(compactKey, offset, limit),0,length());
     }
 
@@ -45,7 +45,7 @@ public class CompactTrieKeySlice {
         return PathEncoder.recode(compactKey, offset, length(),length());
     }
 
-    public CompactTrieKeySlice slice(int from, int to) {
+    public TrieKeySlice slice(int from, int to) {
         if (from==to) // SDL performance fix
             return empty();
         if (from < 0) {
@@ -70,7 +70,7 @@ public class CompactTrieKeySlice {
         return new CompactTrieKeySlice(compactKey, newOffset, newLimit);
     }
 
-    public CompactTrieKeySlice commonPath(CompactTrieKeySlice other) {
+    public TrieKeySlice commonPath(CompactTrieKeySlice other) {
         short maxCommonLengthPossible = (short) Math.min(length(), other.length());
         for (int i = 0; i < maxCommonLengthPossible; i++) {
             if (get(i) != other.get(i)) {
@@ -81,7 +81,8 @@ public class CompactTrieKeySlice {
 
         return slice((short) 0, maxCommonLengthPossible);
     }
-    public CompactTrieKeySlice commonPath(co.rsk.trie.TrieKeySlice other) {
+
+    public TrieKeySlice commonPath(TrieKeySlice other) {
         int maxCommonLengthPossible = Math.min(length(), other.length());
         for (int i = 0; i < maxCommonLengthPossible; i++) {
             if (get(i) != other.get(i)) {
@@ -93,14 +94,14 @@ public class CompactTrieKeySlice {
         return slice(0, maxCommonLengthPossible);
     }
 
-    public CompactTrieKeySlice appendBit(byte implicitByte) {
+    public TrieKeySlice appendBit(byte implicitByte) {
         int length = length();
         byte[] newCompactKey = PathEncoder.recode(compactKey,0,length,length+1);
         PathEncoder.encodeBit(newCompactKey,limit,implicitByte);
         return new CompactTrieKeySlice(newCompactKey,0,length+1);
     }
 
-    public CompactTrieKeySlice append(CompactTrieKeySlice childSharedPath) {
+    public TrieKeySlice append(TrieKeySlice childSharedPath) {
         int childSharedPathLength = childSharedPath.length();
         if (childSharedPathLength==0) return this;
         int length = length();
@@ -111,8 +112,11 @@ public class CompactTrieKeySlice {
         PathEncoder.recodeBinaryPathFromTo(
                 this.compactKey,0,this.offset,this.length(),
                 newcompactKey,0,0);
+
+        CompactTrieKeySlice childSharedPathCmp = ((CompactTrieKeySlice) childSharedPath);
+
         PathEncoder.recodeBinaryPathFromTo(
-                childSharedPath.compactKey,0,childSharedPath.offset,childSharedPath.length(),
+                childSharedPathCmp.compactKey,0,childSharedPathCmp.offset,childSharedPath.length(),
                 newcompactKey,0,length);
 
         return new CompactTrieKeySlice(newcompactKey, 0, newLength);
@@ -121,7 +125,7 @@ public class CompactTrieKeySlice {
     /**
      * Rebuild a shared path as [...this, implicitByte, ...childSharedPath]
      */
-    public CompactTrieKeySlice rebuildSharedPath(byte implicitByte, CompactTrieKeySlice childSharedPath) {
+    public TrieKeySlice rebuildSharedPath(byte implicitByte, TrieKeySlice childSharedPath) {
         int length = length();
         int childSharedPathLength = childSharedPath.length();
         int newLength = length + 1 + childSharedPathLength;
@@ -129,15 +133,18 @@ public class CompactTrieKeySlice {
         PathEncoder.recodeBinaryPathFromTo(
                 this.compactKey,0,this.offset,this.length(),
                 newcompactKey,0,0);
+
+        CompactTrieKeySlice childSharedPathCmp = ((CompactTrieKeySlice) childSharedPath);
+
         PathEncoder.recodeBinaryPathFromTo(
-                childSharedPath.compactKey,0,childSharedPath.offset,childSharedPath.length(),
+                childSharedPathCmp.compactKey,0,childSharedPathCmp.offset,childSharedPath.length(),
                 newcompactKey,0,length+1);
         PathEncoder.encodeBit(newcompactKey,length,implicitByte);
 
         return new CompactTrieKeySlice(newcompactKey, 0, newLength);
     }
 
-    public CompactTrieKeySlice leftPad(int paddingLength) {
+    public TrieKeySlice leftPad(int paddingLength) {
         if (paddingLength == 0) {
             return this;
         }
@@ -150,19 +157,24 @@ public class CompactTrieKeySlice {
         return new CompactTrieKeySlice(paddedcompactKey, 0, newLength);
     }
 
-    public static CompactTrieKeySlice fromKey(byte[] key) {
+    public TrieKeySlice fromKey(byte[] key) {
         byte[] compactKey = PathEncoder.cloneEncoding(key);
         return new CompactTrieKeySlice(compactKey, 0, compactKey.length*8);
     }
 
-    public static CompactTrieKeySlice fromEncoded(byte[] src, int offset, int keyLength, int encodedLength) {
+    public TrieKeySlice fromEncoded(byte[] src, int offset, int keyLength, int encodedLength) {
         byte[] encodedKey = Arrays.copyOfRange(src, offset, offset + encodedLength);
         return new CompactTrieKeySlice(encodedKey, 0, encodedKey.length*8);
     }
 
     static CompactTrieKeySlice emptyTrie = new CompactTrieKeySlice(new byte[0], 0, 0);
 
-    public static CompactTrieKeySlice empty() {
+    // This inherits from Factory class
+    public TrieKeySlice empty() {
+        return emptyTrie;
+    }
+
+    static public TrieKeySlice emptyStatic() {
         return emptyTrie;
     }
 
@@ -170,5 +182,9 @@ public class CompactTrieKeySlice {
     public static CompactTrieKeySlice emptyWithCapacity() {
         int maxSize = (1+30+1+42)*8;
         return new CompactTrieKeySlice(new byte[maxSize], 0, 0);
+    }
+
+    public static TrieKeySliceFactory getFactory() {
+        return emptyTrie;
     }
 }
