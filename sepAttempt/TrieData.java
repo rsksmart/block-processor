@@ -1,12 +1,15 @@
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.sepAttempt;
 
 import co.rsk.core.types.ints.Uint16;
 import co.rsk.core.types.ints.Uint24;
 import co.rsk.core.types.ints.Uint8;
 import co.rsk.crypto.Keccak256;
 import co.rsk.tools.processor.Index.TrieKeySlice;
+import co.rsk.tools.processor.TrieTests.SharedPathSerializer;
+import co.rsk.tools.processor.TrieTests.TrieKeySliceFactoryInstance;
+import co.rsk.tools.processor.TrieTests.TrieStore;
+import co.rsk.tools.processor.TrieTests.VarInt;
 import co.rsk.trie.PathEncoder;
-import co.rsk.trie.Trie;
 import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.util.RLP;
 
@@ -327,11 +330,24 @@ public class TrieData {
         SharedPathSerializer sharedPathSerializer = new SharedPathSerializer(this.sharedPath);
         VarInt childrenSize = getChildrenSize();
 
+        int leftSize;
+        if ((this.left == null) && (this.leftHash == null)) {
+            leftSize =0;
+        } else
+            // Is embedded
+            leftSize =this.left.getSerializedLength();
+
+        int rightSize;
+        if ((this.left == null) && (this.leftHash == null)) {
+            rightSize = 0;
+        } else
+           rightSize= this.right.getSerializedLength();
+
         ByteBuffer buffer = ByteBuffer.allocate(
                 1 + // flags
                         sharedPathSerializer.serializedLength() +
-                        this.left.getSerializedLength() +
-                        this.right.getSerializedLength() +
+                        leftSize +
+                        rightSize +
                         (this.isTerminal() ? 0 : childrenSize.getSizeInBytes()) +
                         (hasLongVal ? Keccak256Helper.DEFAULT_SIZE_BYTES + Uint24.BYTES : lvalue.intValue())
         );

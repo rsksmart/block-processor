@@ -13,28 +13,28 @@ public class ObjectIO {
          * given offsets.
          */
 
-        static boolean getBoolean(byte[] b, int off) {
+    public static boolean getBoolean(byte[] b, int off) {
             return b[off] != 0;
         }
 
-        static char getChar(byte[] b, int off) {
+    public static char getChar(byte[] b, int off) {
             return (char) ((b[off + 1] & 0xFF) +
                     (b[off] << 8));
         }
 
-        static short getShort(byte[] b, int off) {
+    public static short getShort(byte[] b, int off) {
             return (short) ((b[off + 1] & 0xFF) +
                     (b[off] << 8));
         }
 
-        static int getInt(byte[] b, int off) {
+        public static int getInt(byte[] b, int off) {
             return ((b[off + 3] & 0xFF)      ) +
                     ((b[off + 2] & 0xFF) <<  8) +
                     ((b[off + 1] & 0xFF) << 16) +
                     ((b[off    ]       ) << 24);
         }
 
-        static float getFloat(byte[] b, int off) {
+    public static float getFloat(byte[] b, int off) {
             return Float.intBitsToFloat(getInt(b, off));
         }
 
@@ -49,7 +49,14 @@ public class ObjectIO {
                     (((long) b[off])      << 56);
         }
 
-        static double getDouble(byte[] b, int off) {
+    static long getLong5(byte[] b, int off) {
+        return ((b[off + 4] & 0xFFL)      ) +
+                ((b[off + 3] & 0xFFL) <<  8) +
+                ((b[off + 2] & 0xFFL) << 16) +
+                ((b[off + 1] & 0xFFL) << 24) +
+                ((b[off + 0] & 0xFFL) << 32);
+    }
+    public static double getDouble(byte[] b, int off) {
             return Double.longBitsToDouble(getLong(b, off));
         }
 
@@ -58,32 +65,32 @@ public class ObjectIO {
          * offsets.
          */
 
-        static void putBoolean(byte[] b, int off, boolean val) {
+    public static void putBoolean(byte[] b, int off, boolean val) {
             b[off] = (byte) (val ? 1 : 0);
         }
 
-        static void putChar(byte[] b, int off, char val) {
+    public static void putChar(byte[] b, int off, char val) {
             b[off + 1] = (byte) (val      );
             b[off    ] = (byte) (val >>> 8);
         }
 
-        static void putShort(byte[] b, int off, short val) {
+    public static void putShort(byte[] b, int off, short val) {
             b[off + 1] = (byte) (val      );
             b[off    ] = (byte) (val >>> 8);
         }
 
-        static void putInt(byte[] b, int off, int val) {
+    public static void putInt(byte[] b, int off, int val) {
             b[off + 3] = (byte) (val       );
             b[off + 2] = (byte) (val >>>  8);
             b[off + 1] = (byte) (val >>> 16);
             b[off    ] = (byte) (val >>> 24);
         }
 
-        static void putFloat(byte[] b, int off, float val) {
+    public static void putFloat(byte[] b, int off, float val) {
             putInt(b, off,  Float.floatToIntBits(val));
         }
 
-        static void putLong(byte[] b, int off, long val) {
+    public static void putLong(byte[] b, int off, long val) {
             b[off + 7] = (byte) (val       );
             b[off + 6] = (byte) (val >>>  8);
             b[off + 5] = (byte) (val >>> 16);
@@ -94,7 +101,16 @@ public class ObjectIO {
             b[off    ] = (byte) (val >>> 56);
         }
 
-        static void putDouble(byte[] b, int off, double val) {
+    public static void putLong5(byte[] b, int off, long val) {
+        b[off + 5] = (byte) (val       );
+        b[off + 4] = (byte) (val >>>  8);
+        b[off + 3] = (byte) (val >>> 16);
+        b[off + 2] = (byte) (val >>> 24);
+        b[off + 1] = (byte) (val >>> 32);
+        b[off    ] = (byte) (val >>> 40);
+    }
+
+    public static void putDouble(byte[] b, int off, double val) {
             putLong(b, off, Double.doubleToLongBits(val));
         }
 

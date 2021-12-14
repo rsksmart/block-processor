@@ -1,6 +1,6 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.trie.Trie;
+
 
 import java.nio.ByteBuffer;
 import java.util.Optional;
