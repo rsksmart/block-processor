@@ -1,4 +1,4 @@
-package co.rsk.tools.processor.Index;
+package co.rsk.tools.processor.TrieUtils;
 
 import java.util.Arrays;
 
@@ -17,16 +17,16 @@ public class PathEncoder {
         return encodeBinaryPath(path,0,path.length);
     }
 
-    public static byte[] decode(byte[] encoded, int length) {
-        return decode(encoded,0,length);
+    public static byte[] decode(byte[] encoded, int bitLength) {
+        return decode(encoded,0,bitLength);
     }
 
-    public static byte[] decode(byte[] encoded, int offset,int length) {
+    public static byte[] decode(byte[] encoded, int bitoffset,int bitLength) {
         if (encoded == null) {
             throw new IllegalArgumentException("encoded");
         }
 
-        return decodeBinaryPath(encoded, offset, length);
+        return decodeBinaryPath(encoded, bitoffset, bitLength);
     }
 
     public static byte[] recode(byte[] encoded, int sourceOffset,int sourceBitLength,int destBitLength) {

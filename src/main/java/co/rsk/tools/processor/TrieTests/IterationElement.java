@@ -1,6 +1,6 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.Index.TrieKeySlice;
+import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 
 public class IterationElement {
 

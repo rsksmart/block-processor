@@ -1,6 +1,6 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.Index.TrieKeySlice;
+import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 
 import java.util.Deque;
 import java.util.Iterator;

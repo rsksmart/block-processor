@@ -1,7 +1,7 @@
 package co.rsk.tools.processor.TrieTests;
 
 
-import co.rsk.tools.processor.Index.TrieKeySlice;
+import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 import co.rsk.trie.PathEncoder;
 
 import java.nio.ByteBuffer;
@@ -10,9 +10,22 @@ public class SharedPathSerializer {
     private final TrieKeySlice sharedPath;
     private final int lshared;
 
+    // No need to create this object anymore. Just use the static methods.
     public SharedPathSerializer(TrieKeySlice sharedPath) {
         this.sharedPath = sharedPath;
         this.lshared = this.sharedPath.length();
+    }
+
+    public static boolean isPresent(TrieKeySlice sharedPath) {
+        return sharedPath.length() > 0;
+    }
+
+    static int getSerializedLength(TrieKeySlice sharedPath) {
+        if (!isPresent(sharedPath)) {
+            return 0;
+        }
+
+        return lsharedSize(sharedPath) + PathEncoder.calculateEncodedLength(sharedPath.length());
     }
 
     public int serializedLength() {
@@ -28,10 +41,14 @@ public class SharedPathSerializer {
     }
 
     public void serializeInto(ByteBuffer buffer) {
-        if (!isPresent()) {
+      serializeInto(this.sharedPath,buffer);
+    }
+
+    public static void serializeInto(TrieKeySlice sharedPath,ByteBuffer buffer) {
+        if (!isPresent(sharedPath)) {
             return;
         }
-
+        int lshared = sharedPath.length();
         if (1 <= lshared && lshared <= 32) {
             // first byte in [0..31]
             buffer.put((byte) (lshared - 1));
@@ -43,14 +60,14 @@ public class SharedPathSerializer {
             buffer.put(new VarInt(lshared).encode());
         }
 
-        buffer.put(this.sharedPath.encode());
+        buffer.put(sharedPath.encode());
     }
 
-    private int lsharedSize() {
-        if (!isPresent()) {
+    private static int lsharedSize(TrieKeySlice sharedPath) {
+        if (!isPresent(sharedPath)) {
             return 0;
         }
-
+        int lshared = sharedPath.length();
         if (1 <= lshared && lshared <= 32) {
             return 1;
         }
@@ -62,12 +79,17 @@ public class SharedPathSerializer {
         return 1 + VarInt.sizeOf(lshared);
     }
 
+    private int lsharedSize() {
+        return lsharedSize(this.sharedPath);
+    }
+
     public static TrieKeySlice deserialize(ByteBuffer message, boolean sharedPrefixPresent) {
         if (!sharedPrefixPresent) {
             return TrieKeySliceFactoryInstance.get().empty();
         }
 
-        int lshared;
+        int lshared; // this is a bit length
+
         // upgrade to int so we can compare positive values
         int lsharedFirstByte = Byte.toUnsignedInt(message.get());
         if (0 <= lsharedFirstByte && lsharedFirstByte <= 31) {
@@ -83,7 +105,7 @@ public class SharedPathSerializer {
         int lencoded = PathEncoder.calculateEncodedLength(lshared);
         byte[] encodedKey = new byte[lencoded];
         message.get(encodedKey);
-        return TrieKeySliceFactoryInstance.get().fromEncoded(encodedKey, 0, lshared, lencoded);
+        return TrieKeySliceFactoryInstance.get().fromEncoded(encodedKey, 0, lshared);
     }
     private static VarInt readVarInt(ByteBuffer message) {
         // read without touching the buffer position so when we read into bytes it contains the header

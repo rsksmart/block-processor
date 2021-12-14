@@ -1,5 +1,7 @@
 package co.rsk.tools.processor.Index;
 
+import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
+
 public class IndexTriePV  extends IndexTrie {
     protected final TrieKeySlice sharedPath;
     protected final int value;

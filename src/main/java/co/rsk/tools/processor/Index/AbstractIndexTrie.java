@@ -1,5 +1,6 @@
 package co.rsk.tools.processor.Index;
 
+import co.rsk.tools.processor.TrieUtils.CompactTrieKeySlice;
 import org.ethereum.db.ByteArrayWrapper;
 
 import java.util.Set;

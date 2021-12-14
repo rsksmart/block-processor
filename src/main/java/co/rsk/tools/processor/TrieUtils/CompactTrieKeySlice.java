@@ -1,4 +1,4 @@
-package co.rsk.tools.processor.Index;
+package co.rsk.tools.processor.TrieUtils;
 
 //import co.rsk.trie.PathEncoder;
 
@@ -162,10 +162,22 @@ public class CompactTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
         return new CompactTrieKeySlice(compactKey, 0, compactKey.length*8);
     }
 
+    public TrieKeySlice fromEncoded(byte[] encodedKey, int bitOffset, int bitLength) {
+        int byteOffset = bitOffset/8;
+        int byteLength = (bitOffset+bitLength+7)/8;
+        byte[] recodedKey = Arrays.copyOfRange(encodedKey, byteOffset, byteOffset + byteLength);
+        int newBitOffset = bitOffset % 8;
+        return new CompactTrieKeySlice(recodedKey, newBitOffset, newBitOffset+bitLength);
+
+    }
+
+    /* DEPRECATED
     public TrieKeySlice fromEncoded(byte[] src, int offset, int keyLength, int encodedLength) {
         byte[] encodedKey = Arrays.copyOfRange(src, offset, offset + encodedLength);
         return new CompactTrieKeySlice(encodedKey, 0, encodedKey.length*8);
     }
+    */
+
 
     static CompactTrieKeySlice emptyTrie = new CompactTrieKeySlice(new byte[0], 0, 0);
 

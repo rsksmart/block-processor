@@ -28,7 +28,7 @@ import java.util.Optional;
 
 public class NodeReference {
 
-    private static final NodeReference EMPTY = new NodeReference(null, null, null,-1);
+    private static final NodeReference EMPTY = new NodeReference(null, null, null, -1);
 
     private final TrieStore store;
 
@@ -37,6 +37,12 @@ public class NodeReference {
     private long encodedOfs = -1;
 
     public long getEncodedOfs() {
+        if ((encodedOfs == -1) && (lazyNode!=null)) {
+            // it may have not been computed.
+            // This happens when creating tries by hand (and not specifying the
+            // encodeOfs argument in the constructor)
+            encodedOfs = lazyNode.getEncodedOfs();
+        }
         return encodedOfs;
     }
 

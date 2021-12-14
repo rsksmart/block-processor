@@ -1,6 +1,4 @@
-package co.rsk.tools.processor.Index;
-
-import java.util.Arrays;
+package co.rsk.tools.processor.TrieUtils;
 
 public interface TrieKeySlice {
 
@@ -17,7 +15,7 @@ public interface TrieKeySlice {
 
     // These methods create new objects, same as static methods
     public TrieKeySlice fromKey(byte[] key);
-    public TrieKeySlice fromEncoded(byte[] src, int offset, int keyLength, int encodedLength);
+    //public TrieKeySlice fromEncoded(byte[] src, int offset, int keyLength, int encodedLength);
     //public TrieKeySlice empty();
 
 }
