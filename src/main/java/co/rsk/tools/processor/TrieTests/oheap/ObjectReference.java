@@ -1,8 +1,8 @@
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.oheap;
 
 import java.nio.ByteBuffer;
 
-public class InMemReference {
+public class ObjectReference {
     public int len;
     public long leftOfs;
     public long rightOfs;

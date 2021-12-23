@@ -20,10 +20,11 @@ package co.rsk.tools.processor.TrieTests;
 import co.rsk.core.types.ints.Uint8;
 import co.rsk.crypto.Keccak256;
 
+import co.rsk.tools.processor.TrieTests.oheap.ObjectReference;
+import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
 import org.ethereum.crypto.Keccak256Helper;
 
 import java.nio.ByteBuffer;
-import java.util.Objects;
 import java.util.Optional;
 
 public class NodeReference {
@@ -45,10 +46,12 @@ public class NodeReference {
         }
         return encodedOfs;
     }
-
+    public void checkRerefence() {
+        ObjectHeap.get().check(encodedOfs );
+    }
     public void setEncodedOfs(long ofs) {
         encodedOfs = ofs;
-        if ((ofs<-1) || ofs>=InMemStore.MaxPointer) {
+        if ((ofs<-1) || ofs>= ObjectHeap.get().MaxPointer) {
             throw new RuntimeException("Invalid ofs arg (2)ofs="+ofs);
         }
     }
@@ -72,16 +75,32 @@ public class NodeReference {
 
      this.encodedOfs = aEndodedOfs;
 
-        if ((aEndodedOfs<-1) || (aEndodedOfs>=InMemStore.MaxPointer)) {
+        if ((aEndodedOfs<-1) || (aEndodedOfs>= ObjectHeap.get().MaxPointer)) {
             throw new RuntimeException("Invalid ofs arg (1) ofs="+aEndodedOfs);
         }
     }
 
     public Trie getDynamicLazyNode() {
         if (encodedOfs<0) return null;
-        InMemReference r  =InMemStore.get().retrieve(encodedOfs);
-        Trie node = Trie.fromMessage(r.message,encodedOfs,r.leftOfs,r.rightOfs,store);
-        return node;
+        ObjectReference r  = ObjectHeap.get().retrieve(encodedOfs);
+        try {
+            if (encodedOfs==161722718)
+                encodedOfs=encodedOfs;
+            Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftOfs, r.rightOfs, store);
+            return node;
+        } catch (java.nio.BufferUnderflowException e) {
+            //encodeOfs: 3386664381
+            //encodeOfs: 2
+            System.out.println("encodeOfs: "+encodedOfs);
+            int s = ObjectHeap.get().getSpaceNumOfPointer(encodedOfs);
+            System.out.println("space: "+ s);
+            System.out.println("internalOfs: "+ObjectHeap.get().getSpaceOfsFromPointer(s,encodedOfs));
+            System.out.println("messageLen: "+r.message.array().length);
+            r  = ObjectHeap.get().retrieve(encodedOfs);
+
+            throw e;
+        }
+
     }
 
     public boolean isEmpty() {
@@ -171,7 +190,7 @@ public class NodeReference {
     private byte[] getMessageFromMem() {
         if (encodedOfs<0)
             return null;
-        InMemReference r =InMemStore.get().retrieve(encodedOfs);
+        ObjectReference r = ObjectHeap.get().retrieve(encodedOfs);
         return r.getAsArray();
     }
 

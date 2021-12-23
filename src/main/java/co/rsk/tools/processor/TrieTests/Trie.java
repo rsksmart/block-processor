@@ -9,6 +9,8 @@ import co.rsk.crypto.Keccak256;
 import co.rsk.metrics.profilers.Metric;
 import co.rsk.metrics.profilers.Profiler;
 import co.rsk.metrics.profilers.ProfilerFactory;
+import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
+import co.rsk.tools.processor.TrieTests.oheap.ObjectReference;
 import co.rsk.tools.processor.TrieUtils.PathEncoder;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 import org.ethereum.crypto.Keccak256Helper;
@@ -144,14 +146,21 @@ public class Trie {
 
 
     private void storeNodeInMem() {
-        if (InMemStore.get().isRemapping())
+        if (ObjectHeap.get().isRemapping())
             throw new RuntimeException("Should never encode nodes during remapping");
         //ByteBuffer buffer = ByteBuffer.wrap(mem,memTop,mem.length-memTop);
         //serializeToByteBuffer(buffer);
         internalToMessage();
-        this.encodedOfs =InMemStore.get().add(encoded,
+        this.encodedOfs = ObjectHeap.get().add(encoded,
                 left.getEncodedOfs(),
                 right.getEncodedOfs());
+        if (encodedOfs==47958557) {
+            System.out.println("First position 1");
+            ObjectHeap.get().bug = false;
+            ObjectHeap.get().checkbug();
+
+            retrieveNode(encodedOfs);
+        }
     }
 
     private Trie(TrieStore store, TrieKeySlice sharedPath, byte[] value,
@@ -200,13 +209,55 @@ public class Trie {
         remapEncoding();
     }
 
-    void remapEncoding() {
+    public void checkTree() {
+        // I think I could skip moving children if the current offset corresponds to the current space
+        // if I reserve space for the parent before creating children, then the parent would always be
+        // older than the children. But that requires knowing the size of the parent before serializing the
+        // children.
+        for (byte k = 0; k < ARITY; k++) {
+            Trie node = this.retrieveNode(k);
+
+            if (node == null) {
+                continue;
+            }
+            node.checkTree();
+
+            getNodeReference(k).checkRerefence();
+        }
+        checkReference();
+    }
+
+    void checkReference() {
         if (!isEmbedded) {
-            encodedOfs = InMemStore.get().remap(encodedOfs, left.getEncodedOfs(), right.getEncodedOfs());
+            ObjectHeap.get().check(encodedOfs);// left.getEncodedOfs(), right.getEncodedOfs());
+        }
+
+    }
+
+    void remapEncoding() {
+        long pencodedOfs = encodedOfs;
+        if (encodedOfs==161722718)
+            encodedOfs=encodedOfs;
+        if (!isEmbedded) {
+            encodedOfs = ObjectHeap.get().remap(encodedOfs, left.getEncodedOfs(), right.getEncodedOfs());
+        }
+        if (encodedOfs==47958557) {
+            System.out.println("First position");
+        }
+        if (encodedOfs==161722718) {
+            encodedOfs = encodedOfs;
+            System.out.println("previous ofs: "+pencodedOfs);
+            System.out.println("previous space: "+ObjectHeap.get().getSpaceNumOfPointer(pencodedOfs));
+            Trie xx = retrieveNode(encodedOfs);
         }
         reMapped = true;
     }
-
+    public static Trie retrieveNode(long encodedOfs) {
+        byte[] data = ObjectHeap.get().retrieveData(encodedOfs);
+        ObjectReference r = ObjectHeap.get().retrieve(encodedOfs);
+        Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftOfs, r.rightOfs, null);
+        return node;
+    }
     public void compressIfNecessary() {
         if (!isCompressed) return;
         if (isEmbedded) return;
@@ -1343,8 +1394,9 @@ public class Trie {
         this.saved = true;
         return this;
     }
-    public int countNodes() {
-        int nodes = 1;
+
+    public long countNodes() {
+        long nodes = 1;
         for (byte k = 0; k < ARITY; k++) {
             Trie node = this.retrieveNode(k);
 
@@ -1356,8 +1408,9 @@ public class Trie {
         }
         return nodes;
     }
-    public int countLeafNodes() {
-        int nodes = 0;
+
+    public long countLeafNodes() {
+        long nodes = 0;
         for (byte k = 0; k < ARITY; k++) {
             Trie node = this.retrieveNode(k);
 

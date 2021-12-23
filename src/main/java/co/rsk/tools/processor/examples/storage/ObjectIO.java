@@ -49,12 +49,18 @@ public class ObjectIO {
                     (((long) b[off])      << 56);
         }
 
-    static long getLong5(byte[] b, int off) {
-        return ((b[off + 4] & 0xFFL)      ) +
+    public static long getLong5(byte[] b, int off) {
+        long r= ((b[off + 4] & 0xFFL)      ) +
                 ((b[off + 3] & 0xFFL) <<  8) +
                 ((b[off + 2] & 0xFFL) << 16) +
                 ((b[off + 1] & 0xFFL) << 24) +
                 ((b[off + 0] & 0xFFL) << 32);
+
+        if (r>=1L<<39) {
+            // negative
+            r = r - (1L<<40);
+        }
+        return r;
     }
     public static double getDouble(byte[] b, int off) {
             return Double.longBitsToDouble(getLong(b, off));
@@ -102,12 +108,13 @@ public class ObjectIO {
         }
 
     public static void putLong5(byte[] b, int off, long val) {
-        b[off + 5] = (byte) (val       );
-        b[off + 4] = (byte) (val >>>  8);
-        b[off + 3] = (byte) (val >>> 16);
-        b[off + 2] = (byte) (val >>> 24);
-        b[off + 1] = (byte) (val >>> 32);
-        b[off    ] = (byte) (val >>> 40);
+        if ((val>=(1L<<39)) || (val<-(1L<<39)))
+            throw new RuntimeException("Cannot encode "+val);
+        b[off + 4] = (byte) (val       );
+        b[off + 3] = (byte) (val >>>  8);
+        b[off + 2] = (byte) (val >>> 16);
+        b[off + 1] = (byte) (val >>> 24);
+        b[off + 0] = (byte) (val >>> 32);
     }
 
     public static void putDouble(byte[] b, int off, double val) {
