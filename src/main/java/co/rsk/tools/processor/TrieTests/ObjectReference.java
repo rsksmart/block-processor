@@ -1,11 +1,11 @@
-package co.rsk.tools.processor.TrieTests.oheap;
+package co.rsk.tools.processor.TrieTests;
 
 import java.nio.ByteBuffer;
 
 public class ObjectReference {
     public int len;
-    public long leftOfs;
-    public long rightOfs;
+    public EncodedObjectRef leftOfs;
+    public EncodedObjectRef rightOfs;
     public ByteBuffer message;
 
     public byte[] getAsArray() {

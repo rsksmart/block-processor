@@ -20,7 +20,6 @@ package co.rsk.tools.processor.TrieTests;
 import co.rsk.core.types.ints.Uint8;
 import co.rsk.crypto.Keccak256;
 
-import co.rsk.tools.processor.TrieTests.oheap.ObjectReference;
 import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
 import org.ethereum.crypto.Keccak256Helper;
 
@@ -29,16 +28,16 @@ import java.util.Optional;
 
 public class NodeReference {
 
-    private static final NodeReference EMPTY = new NodeReference(null, null, null, -1);
+    private static final NodeReference EMPTY = new NodeReference(null, null, null, null);
 
     private final TrieStore store;
 
     private Trie lazyNode;
     private Keccak256 lazyHash;
-    private long encodedOfs = -1;
+    private EncodedObjectRef encodedOfs;
 
-    public long getEncodedOfs() {
-        if ((encodedOfs == -1) && (lazyNode!=null)) {
+    public EncodedObjectRef getEncodedOfs() {
+        if ((encodedOfs == null) && (lazyNode!=null)) {
             // it may have not been computed.
             // This happens when creating tries by hand (and not specifying the
             // encodeOfs argument in the constructor)
@@ -46,21 +45,22 @@ public class NodeReference {
         }
         return encodedOfs;
     }
+
     public void checkRerefence() {
-        ObjectHeap.get().check(encodedOfs );
+        ObjectMapper.get().checkDuringRemap(encodedOfs );
     }
-    public void setEncodedOfs(long ofs) {
+
+    public void setEncodedOfs(EncodedObjectRef ofs) {
         encodedOfs = ofs;
-        if ((ofs<-1) || ofs>= ObjectHeap.get().MaxPointer) {
-            throw new RuntimeException("Invalid ofs arg (2)ofs="+ofs);
-        }
+        ObjectMapper.get().verifyEOR(ofs);
     }
 
     public void recomputeEncodeOfs() {
         encodedOfs = getNode().get().getEncodedOfs();
     }
 
-    public NodeReference(TrieStore store,  Trie node, Keccak256 hash,long aEndodedOfs) {
+    public NodeReference(TrieStore store,  Trie node, Keccak256 hash,
+                         EncodedObjectRef aEndodedOfs) {
         this.store = store;
         if (node != null && node.isEmptyTrie()) {
             this.lazyNode = null;
@@ -75,29 +75,28 @@ public class NodeReference {
 
      this.encodedOfs = aEndodedOfs;
 
-        if ((aEndodedOfs<-1) || (aEndodedOfs>= ObjectHeap.get().MaxPointer)) {
-            throw new RuntimeException("Invalid ofs arg (1) ofs="+aEndodedOfs);
-        }
+        ObjectMapper.get().verifyEOR(aEndodedOfs);
     }
 
     public Trie getDynamicLazyNode() {
-        if (encodedOfs<0) return null;
-        ObjectReference r  = ObjectHeap.get().retrieve(encodedOfs);
+        if (encodedOfs==null) return null;
+        ObjectReference r  = ObjectMapper.get().retrieve(encodedOfs);
         try {
-            if (encodedOfs==161722718)
-                encodedOfs=encodedOfs;
+            //if (encodedOfs==161722718)
+            //    encodedOfs=encodedOfs;
             Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftOfs, r.rightOfs, store);
             return node;
         } catch (java.nio.BufferUnderflowException e) {
             //encodeOfs: 3386664381
             //encodeOfs: 2
+            /*
             System.out.println("encodeOfs: "+encodedOfs);
             int s = ObjectHeap.get().getSpaceNumOfPointer(encodedOfs);
             System.out.println("space: "+ s);
             System.out.println("internalOfs: "+ObjectHeap.get().getSpaceOfsFromPointer(s,encodedOfs));
             System.out.println("messageLen: "+r.message.array().length);
             r  = ObjectHeap.get().retrieve(encodedOfs);
-
+            */
             throw e;
         }
 
@@ -119,7 +118,7 @@ public class NodeReference {
         if (lazyNode != null) {
             return Optional.of(lazyNode);
         }
-        if (encodedOfs>=0) {
+        if (encodedOfs!=null) {
             if (persistent) {
                 lazyNode = getDynamicLazyNode();
                 return Optional.of(lazyNode);
@@ -159,7 +158,7 @@ public class NodeReference {
 
         if (lazyNode == null) {
 
-            if (encodedOfs>=0) {
+            if (encodedOfs!=null) {
                 // This should not happen.
                 // If lazyNode is null, then the lazyHash should be set.
                 return Optional.of(getDynamicLazyNode().getHash());
@@ -188,9 +187,9 @@ public class NodeReference {
     }
 
     private byte[] getMessageFromMem() {
-        if (encodedOfs<0)
+        if (encodedOfs==null)
             return null;
-        ObjectReference r = ObjectHeap.get().retrieve(encodedOfs);
+        ObjectReference r = ObjectMapper.get().retrieve(encodedOfs);
         return r.getAsArray();
     }
 

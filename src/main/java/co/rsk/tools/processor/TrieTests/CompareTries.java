@@ -4,7 +4,7 @@ package co.rsk.tools.processor.TrieTests;
 
 import co.rsk.core.Coin;
 import co.rsk.core.types.ints.Uint24;
-import co.rsk.tools.processor.TrieTests.oheap.ObjectReference;
+import co.rsk.tools.processor.TrieTests.oheap.LongEOR;
 import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
 import co.rsk.tools.processor.TrieUtils.ExpandedTrieKeySlice;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
@@ -19,7 +19,7 @@ public class CompareTries {
     int valueSize;
     int keySize;
     long max = 32L*(1<<20);// 8 Million nodes // 1_000_000;
-    ObjectHeap ms;
+    ObjectMapper ms;
     long remapTime =0;
     long remapTimeBelow50 =0;
     long remapTimeOver50 =0;
@@ -28,7 +28,8 @@ public class CompareTries {
     long started;
     long ended;
     long endMbs;
-    Trie t;
+    Trie rootNode;
+
     public void prepare() {
         // in satoshis
         // 0.1 bitcoin
@@ -52,7 +53,7 @@ public class CompareTries {
         System.out.println("keysize: "+keySize);
         System.out.println("valueSize: "+valueSize);
 
-        ms = ObjectHeap.get();
+        ms = ObjectMapper.get();
         remapTime=0;
         remapTimeBelow50 =0;
         remapTimeOver50 =0;
@@ -67,7 +68,28 @@ public class CompareTries {
         started = System.currentTimeMillis();
         System.out.println("Filling...");
     }
-        public void printMemStats(String s) {
+
+    public void printMemStatsShort() {
+        if (!(ms instanceof ObjectHeap))
+            return;
+
+        ObjectHeap ms = (ObjectHeap) this.ms;
+
+        System.out.println("InMemStore usage[%]: " + ms.getUsagePercent());
+        System.out.println("InMemStore usage[Mb]: " + ms.getMemUsed() / 1000 / 1000);
+
+        System.out.println("total remap time[s]: " + remapTime / 1000);
+        System.out.println("remap time below 50% [s]: " + remapTimeBelow50 / 1000);
+        System.out.println("remap time above 50% [s]: " + remapTimeOver50 / 1000);
+
+        System.out.println("remap time per insertion[msec]: " + (remapTime * 1.0 / max));
+    }
+
+    public void printMemStats(String s) {
+            if (!(ms instanceof ObjectHeap))
+                return;
+
+            ObjectHeap ms = (ObjectHeap) this.ms;
             System.out.println(s+" InMemStore usage[%]: " + ms.getUsagePercent());
             System.out.println(s+" InMemStore usage[Mb]: " + ms.getMemUsed() / 1000 / 1000);
             System.out.println(s+" InMemStore alloc[Mb]: " + ms.getMemAllocated() / 1000 / 1000);
@@ -77,6 +99,7 @@ public class CompareTries {
             System.out.println(s+" InMemStore cur space    : " + ms.getCurSpaceNum());
             System.out.println(s+" InMemStore cur space usage[%]: " + ms.getCurSpace().getUsagePercent());
         }
+
     public void dumpProgress(long i,long amax) {
         System.out.println("item " + i + " (" + (i * 100 / amax) + "%)");
         printMemStats("--");
@@ -92,6 +115,11 @@ public class CompareTries {
     }
 
     public void garbageCollection(Trie t) {
+        if (!(ms instanceof ObjectHeap))
+            return;
+
+        ObjectHeap ms = (ObjectHeap) this.ms;
+
         System.out.println(":::::::::::::::::::::::::::::::::::::");
         System.out.println(":: Remapping from: "+ms.getUsagePercent()+"%");
         long rstarted = System.currentTimeMillis();
@@ -129,25 +157,33 @@ public class CompareTries {
         prepare();
 
         start();
-        if (t==null)
-            t = new Trie();
+        if (rootNode ==null)
+            rootNode = new Trie();
 
         for (long i = 0; i < max; i++) {
 
             byte[] key = TestUtils.randomBytes(keySize);
             byte[] value = TestUtils.randomBytes(valueSize);
-            t = t.put(key, value);
+            rootNode = rootNode.put(key, value);
             if (i % 100000 == 0) {
                 dumpProgress(i,max);
             }
-            if (ms.heapIsAlmostFull()) {
-                garbageCollection(t);
+            if (shouldRunGC()) {
+                garbageCollection(rootNode);
             }
         }
         stop();
         dumpResults();
-        countNodes(t);
+        //countNodes(rootNode);
     }
+
+   public boolean shouldRunGC() {
+       if (!(ms instanceof ObjectHeap))
+           return false;
+
+       ObjectHeap ms = (ObjectHeap) this.ms;
+       return ms.heapIsAlmostFull();
+   }
 
     public void stop() {
         ended = System.currentTimeMillis();
@@ -165,13 +201,8 @@ public class CompareTries {
         System.out.println("Used After MB: " + endMbs);
         System.out.println("Comsumed MBs: " + (endMbs - startMbs));
 
-        System.out.println("InMemStore usage[%]: " + ms.getUsagePercent());
-        System.out.println("InMemStore usage[Mb]: " + ms.getMemUsed() / 1000 / 1000);
-        System.out.println("total remap time[s]: " + remapTime / 1000);
-        System.out.println("remap time below 50% [s]: " + remapTimeBelow50 / 1000);
-        System.out.println("remap time above 50% [s]: " + remapTimeOver50 / 1000);
+        printMemStatsShort();
 
-        System.out.println("remap time per insertion[msec]: " + (remapTime * 1.0 / max));
     }
 
     public void countNodes(Trie t) {
@@ -230,7 +261,7 @@ public class CompareTries {
             }
         }
         System.out.println("Merging subttrees...");
-        t = mergeNodes(nodes);
+        rootNode = mergeNodes(nodes);
         stop();
         dumpResults();
         //countNodes(t);
@@ -281,8 +312,8 @@ public class CompareTries {
 
                 newNodes[i] = new Trie(null,emptySharedPath,
                         null,
-                        new NodeReference(null,nodes[i*2],null,-1),
-                        new NodeReference(null,nodes[i*2+1],null,-1),
+                        new NodeReference(null,nodes[i*2],null,null),
+                        new NodeReference(null,nodes[i*2+1],null,null),
                         Uint24.ZERO,
                         null);
                 nodes[i*2] = null; // try to free mem
@@ -321,8 +352,8 @@ public class CompareTries {
         byte[] s1  = new byte[100];
         long s1o = ms.add(s1,leftOfs,rightOfs);
         ObjectReference s1ref = ms.retrieve(s1o);
-        myassert (s1ref.leftOfs==leftOfs);
-        myassert (s1ref.rightOfs==rightOfs);
+        myassert (((LongEOR) s1ref.leftOfs).ofs==leftOfs);
+        myassert (((LongEOR) s1ref.rightOfs).ofs==rightOfs);
         myassert (s1ref.len==s1.length);
         myassert (Arrays.equals(s1ref.getAsArray(),s1));
 
@@ -330,21 +361,24 @@ public class CompareTries {
 
     }
 
+
     public void smallWorldTest() {
-        ObjectHeap.default_spaceMegabytes = 50;
-        ObjectHeap.get();
-        max = 1L * (1 << 20);
+        ObjectHeap.default_spaceMegabytes = 500;
+        ObjectMapper.get();
+        max = 16L * (1 << 20);
         buildbottomUp();
         //ObjectHeap.get().save("16M",c.t.getEncodedOfs());
-        //System.exit(0);
+       //   System.exit(0);
         //ObjectHeap.get().reset();
         //long rootOfs = ObjectHeap.get().load("4M");
         //t = retrieveNode(rootOfs);
-        //countNodes(t);
+
+        countNodes(rootNode);
+        System.exit(0);
         // now add another 8M items to it!
         max = 1L*(1<<20);
         buildByInsertion();
-        countNodes(t);
+        countNodes(rootNode);
     }
 
     public static void main (String args[]) {
@@ -352,30 +386,34 @@ public class CompareTries {
         CompareTries c = new CompareTries();
         c.smallWorldTest();
         System.exit(0);
+    }
+
+    public  void testLoadSave() {
 
         // start with 32M items already loaded
         boolean create = true;
         if (create) {
-            c.max = 16L * (1 << 20);
-            c.buildbottomUp();
-            ObjectHeap.get().save("16M",c.t.getEncodedOfs());
+            max = 16L * (1 << 20);
+            buildbottomUp();
+            ObjectHeap.get().save("16M",
+                    ((LongEOR) rootNode.getEncodedOfs()).ofs);
             System.exit(0);
             ObjectHeap.get().reset();
 
         }
 
         long rootOfs = ObjectHeap.get().load("4M");
-        c.t = retrieveNode(rootOfs);
-        c.countNodes(c.t);
+        rootNode = retrieveNode(new LongEOR(rootOfs));
+        countNodes(rootNode);
         System.exit(0);
         // now add another 8M items to it!
-        c.max = 8L*(1<<20);
-        c.buildByInsertion();
-
+        max = 8L * (1 << 20);
+        buildByInsertion();
     }
 
-    public static Trie retrieveNode(long encodedOfs) {
-        ObjectReference r = ObjectHeap.get().retrieve(encodedOfs);
+
+    public static Trie retrieveNode(EncodedObjectRef encodedOfs) {
+        ObjectReference r = ObjectMapper.get().retrieve(encodedOfs);
         Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftOfs, r.rightOfs, null);
         return node;
     }

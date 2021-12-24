@@ -1,14 +1,15 @@
 package co.rsk.tools.processor.TrieTests.oheap;
 
+import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
+import co.rsk.tools.processor.TrieTests.ObjectMapper;
+import co.rsk.tools.processor.TrieTests.ObjectReference;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
-import org.ethereum.util.ByteUtil;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.BitSet;
 
 
-public class ObjectHeap {
+public class ObjectHeap extends ObjectMapper {
     public static  int default_spaceMegabytes = 1600;
     public static  int default_maxSpaces = 4;
     public static  int default_freeSpaces =2;
@@ -290,7 +291,11 @@ public class ObjectHeap {
         return true;
     }
 
-    public void check(long ofs) {
+    public void checkDuringRemap(EncodedObjectRef ref) {
+        checkDuringRemap(getOfs(ref));
+    }
+
+    public void checkDuringRemap(long ofs) {
         if (ofs==-1) return;
         //if (getSpaceNumOfPointer(ofs)==oldSpaceNum)
         if (oldSpacesBitmap.get(getSpaceNumOfPointer(ofs)))
@@ -331,6 +336,14 @@ public class ObjectHeap {
         if(ofs>space.mem.length-debugHeaderSize) return;
         checkDeugMagicWord(space,ofs);
     }
+
+    public EncodedObjectRef remap(EncodedObjectRef aofs,EncodedObjectRef aleftOfs,EncodedObjectRef arightOfs) {
+     long rightOfs = getOfs(arightOfs);
+     long leftOfs = getOfs(aleftOfs);
+     long ofs = getOfs( aofs);
+     return new LongEOR(remap(ofs,leftOfs,rightOfs));
+    }
+
 
     public long remap(long ofs,long leftOfs,long rightOfs) {
         if (ofs==161722791)
@@ -527,6 +540,26 @@ public class ObjectHeap {
     // We could also accept aa variable number of offsets. However, as we're only
     // using this store for nodes of the trie, we'll never need to store an object
     // having more than 2 offsets.
+    public long getOfs(EncodedObjectRef ref) {
+        if (ref==null)
+            return -1;
+      return ((LongEOR) ref).ofs;
+    }
+
+    public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftOfs, EncodedObjectRef rightOfs) {
+        long aLeftOfs = getOfs(leftOfs);
+        long aRightOfs = getOfs(rightOfs);
+        return (EncodedObjectRef) new LongEOR(add(encoded,aLeftOfs,aRightOfs));
+    }
+
+    public void verifyEOR(EncodedObjectRef ref) {
+        if (ref==null) return;
+        long ofs =((LongEOR) ref).ofs;
+        if ((ofs<-1) || ofs>= MaxPointer) {
+            throw new RuntimeException("Invalid ofs arg (2)ofs="+ofs);
+        }
+
+    }
     public long add(byte[] encoded,long leftOfs,long rightOfs) {
         Space space;
         // The invariant is that leftOfs and rightOfs can never be on a higher space
@@ -570,6 +603,10 @@ public class ObjectHeap {
         return buildPointer(curSpaceNum,oldMemTop);
     }
 
+    public byte[] retrieveData(EncodedObjectRef encodedOfs) {
+        return retrieveData(getOfs(encodedOfs));
+    }
+
     public byte[] retrieveData(long encodedOfs) {
         Space space;
 
@@ -580,6 +617,11 @@ public class ObjectHeap {
         System.arraycopy(space.mem,internalOfs+F3,d,0,d.length);
         return d;
     }
+
+    public ObjectReference retrieve(EncodedObjectRef encodedOfs) {
+        return retrieve(getOfs(encodedOfs));
+    }
+
     public ObjectReference retrieve(long encodedOfs) {
         Space space;
 
@@ -591,8 +633,8 @@ public class ObjectHeap {
         // Get the max size window
         r.len = space.mem[internalOfs];
         checkDebugFooter(space,internalOfs+F3+r.len);
-        r.leftOfs=ObjectIO.getLong5(space.mem, internalOfs+F1);
-        r.rightOfs=ObjectIO.getLong5(space.mem, internalOfs+F2);
+        r.leftOfs= new LongEOR(ObjectIO.getLong5(space.mem, internalOfs+F1));
+        r.rightOfs=new LongEOR(ObjectIO.getLong5(space.mem, internalOfs+F2));
         r.message = ByteBuffer.wrap(space.mem,internalOfs+F3,r.len);
         return r;
     }
@@ -601,7 +643,7 @@ public class ObjectHeap {
         org.bouncycastle.util.encoders.Hex.toHexString(spaces[space].mem,ofs,
                 (int) spaces[space].mem[ofs]);
     }
-    
+
  */
     public long getMemUsed() {
         long used = 0;

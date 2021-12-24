@@ -10,7 +10,6 @@ import co.rsk.metrics.profilers.Metric;
 import co.rsk.metrics.profilers.Profiler;
 import co.rsk.metrics.profilers.ProfilerFactory;
 import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
-import co.rsk.tools.processor.TrieTests.oheap.ObjectReference;
 import co.rsk.tools.processor.TrieUtils.PathEncoder;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 import org.ethereum.crypto.Keccak256Helper;
@@ -102,7 +101,7 @@ public class Trie {
 
     static boolean isCompressed = true;
 
-    long encodedOfs = -1;
+    EncodedObjectRef encodedOfs;
     boolean isEmbedded;
 
     boolean reMapped = false;
@@ -121,7 +120,7 @@ public class Trie {
         this(store, sharedPath, value,
                 NodeReference.empty(),
                 NodeReference.empty(), getDataLength(value), null,
-                new VarInt(0),-1,
+                new VarInt(0),null,
                 terminalNodeEmbeddable(
                         new SharedPathSerializer(sharedPath).serializedLength(),
                         value));
@@ -139,35 +138,36 @@ public class Trie {
 
     public Trie(TrieStore store, TrieKeySlice sharedPath, byte[] value, NodeReference left, NodeReference right, Uint24 valueLength, Keccak256 valueHash) {
 
-        this(store, sharedPath, value, left, right, valueLength, valueHash, null,-1,
+        this(store, sharedPath, value, left, right, valueLength, valueHash, null,null,
                 isEmbeddable(sharedPath, left,  right, valueLength));
     }
 
 
 
     private void storeNodeInMem() {
-        if (ObjectHeap.get().isRemapping())
+        if (ObjectMapper.get().isRemapping())
             throw new RuntimeException("Should never encode nodes during remapping");
         //ByteBuffer buffer = ByteBuffer.wrap(mem,memTop,mem.length-memTop);
         //serializeToByteBuffer(buffer);
         internalToMessage();
-        this.encodedOfs = ObjectHeap.get().add(encoded,
+        this.encodedOfs = ObjectMapper.get().add(encoded,
                 left.getEncodedOfs(),
                 right.getEncodedOfs());
+        /*
         if (encodedOfs==47958557) {
             System.out.println("First position 1");
             ObjectHeap.get().bug = false;
             ObjectHeap.get().checkbug();
 
             retrieveNode(encodedOfs);
-        }
+        }*/
     }
 
     private Trie(TrieStore store, TrieKeySlice sharedPath, byte[] value,
                  NodeReference left, NodeReference right,
                  Uint24 valueLength, Keccak256 valueHash,
                  VarInt childrenSize,
-                 long aEncodedOfs) {
+                 EncodedObjectRef aEncodedOfs) {
         this(store,  sharedPath, value,
         left,  right,
                  valueLength, valueHash,
@@ -179,7 +179,7 @@ public class Trie {
                  NodeReference left, NodeReference right,
                  Uint24 valueLength, Keccak256 valueHash,
                  VarInt childrenSize,
-                 long aEncodedOfs,boolean isEmbedded) {
+                 EncodedObjectRef aEncodedOfs,boolean isEmbedded) {
         this.isEmbedded = isEmbedded;
         this.value = value;
         this.left = left;
@@ -229,18 +229,22 @@ public class Trie {
 
     void checkReference() {
         if (!isEmbedded) {
-            ObjectHeap.get().check(encodedOfs);// left.getEncodedOfs(), right.getEncodedOfs());
+            ObjectMapper.get().checkDuringRemap(encodedOfs);// left.getEncodedOfs(), right.getEncodedOfs());
         }
 
     }
 
     void remapEncoding() {
+        /*
         long pencodedOfs = encodedOfs;
         if (encodedOfs==161722718)
             encodedOfs=encodedOfs;
+
+         */
         if (!isEmbedded) {
-            encodedOfs = ObjectHeap.get().remap(encodedOfs, left.getEncodedOfs(), right.getEncodedOfs());
+            encodedOfs = ObjectMapper.get().remap(encodedOfs, left.getEncodedOfs(), right.getEncodedOfs());
         }
+        /*
         if (encodedOfs==47958557) {
             System.out.println("First position");
         }
@@ -250,18 +254,21 @@ public class Trie {
             System.out.println("previous space: "+ObjectHeap.get().getSpaceNumOfPointer(pencodedOfs));
             Trie xx = retrieveNode(encodedOfs);
         }
+
+         */
         reMapped = true;
     }
-    public static Trie retrieveNode(long encodedOfs) {
-        byte[] data = ObjectHeap.get().retrieveData(encodedOfs);
-        ObjectReference r = ObjectHeap.get().retrieve(encodedOfs);
+
+    public static Trie retrieveNode(EncodedObjectRef encodedOfs) {
+        //byte[] data = ObjectHeap.get().retrieveData(encodedOfs);
+        ObjectReference r = ObjectMapper.get().retrieve(encodedOfs);
         Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftOfs, r.rightOfs, null);
         return node;
     }
     public void compressIfNecessary() {
         if (!isCompressed) return;
         if (isEmbedded) return;
-        if (encodedOfs<0)
+        if (encodedOfs==null)
             storeNodeInMem();
         if (!this.left.isEmbeddable())
             this.left.removeLazyNode();
@@ -285,7 +292,7 @@ public class Trie {
 
             trie = fromMessageOrchid(message, store);
         } else {
-            trie = fromMessageRskip107(ByteBuffer.wrap(message), -1,-1,-1,store);
+            trie = fromMessageRskip107(ByteBuffer.wrap(message), null,null,null,store);
         }
 
         profiler.stop(metric);
@@ -293,8 +300,9 @@ public class Trie {
         return trie;
     }
     public static Trie fromMessage(ByteBuffer message,
-                                   long encodedOfs,
-                                   long leftOfs,long rightOfs,
+                                   EncodedObjectRef encodedOfs,
+                                   EncodedObjectRef leftOfs,
+                                   EncodedObjectRef rightOfs,
                                    TrieStore store) {
         Trie trie;
         Metric metric = profiler.start(Profiler.PROFILING_TYPE.BUILD_TRIE_FROM_MSG);
@@ -348,13 +356,13 @@ public class Trie {
         int nhashes = 0;
         if ((bhashes & 0b01) != 0) {
             Keccak256 nodeHash = readHash(message, current);
-            left = new NodeReference(store, null, nodeHash,-1);
+            left = new NodeReference(store, null, nodeHash,null);
             current += keccakSize;
             nhashes++;
         }
         if ((bhashes & 0b10) != 0) {
             Keccak256 nodeHash = readHash(message, current);
-            right = new NodeReference(store, null, nodeHash,-1);
+            right = new NodeReference(store, null, nodeHash,null);
             current += keccakSize;
             nhashes++;
         }
@@ -394,8 +402,9 @@ public class Trie {
     }
 
     private static Trie fromMessageRskip107(ByteBuffer message,
-                                            long aEncodedOfs,
-                                            long leftOfs,long rightOfs,
+                                            EncodedObjectRef aEncodedOfs,
+                                            EncodedObjectRef leftOfs,
+                                            EncodedObjectRef rightOfs,
                                             TrieStore store) {
 
         byte flags = message.get();
@@ -419,7 +428,7 @@ public class Trie {
 
                 byte[] serializedNode = new byte[length.intValue()];
                 message.get(serializedNode);
-                Trie node = fromMessageRskip107(ByteBuffer.wrap(serializedNode), -1,-1,-1,store);
+                Trie node = fromMessageRskip107(ByteBuffer.wrap(serializedNode), null,null,null,store);
                 left = new NodeReference(store, node, null,leftOfs);
             } else {
                 byte[] valueHash = new byte[Keccak256Helper.DEFAULT_SIZE_BYTES];
@@ -437,7 +446,7 @@ public class Trie {
 
                 byte[] serializedNode = new byte[length.intValue()];
                 message.get(serializedNode);
-                Trie node = fromMessageRskip107(ByteBuffer.wrap(serializedNode),-1,-1,-1, store);
+                Trie node = fromMessageRskip107(ByteBuffer.wrap(serializedNode),null,null,null, store);
                 right = new NodeReference(store, node, null,rightOfs);
             } else {
                 byte[] valueHash = new byte[Keccak256Helper.DEFAULT_SIZE_BYTES];
@@ -984,7 +993,7 @@ public class Trie {
 
         TrieKeySlice newSharedPath = trie.sharedPath.rebuildSharedPath(childImplicitByte, child.sharedPath);
 
-        return new Trie(child.store, newSharedPath, child.value, child.left, child.right, child.valueLength, child.valueHash, child.childrenSize,-1);
+        return new Trie(child.store, newSharedPath, child.value, child.left, child.right, child.valueLength, child.valueHash, child.childrenSize,null);
     }
 
     private static Uint24 getDataLength(byte[] value) {
@@ -1086,7 +1095,7 @@ public class Trie {
             return null;
         }
 
-        return new Trie(this.store, this.sharedPath, this.value, newLeft, newRight, this.valueLength, this.valueHash, childrenSize,-1);
+        return new Trie(this.store, this.sharedPath, this.value, newLeft, newRight, this.valueLength, this.valueHash, childrenSize,null);
     }
 
     //Split creates a new node that splits from this node in the point
@@ -1094,7 +1103,7 @@ public class Trie {
     private Trie split(TrieKeySlice commonPath) {
         int commonPathLength = commonPath.length();
         TrieKeySlice newChildSharedPath = sharedPath.slice(commonPathLength + 1, sharedPath.length());
-        Trie newChildTrie = new Trie(this.store, newChildSharedPath, this.value, this.left, this.right, this.valueLength, this.valueHash, this.childrenSize,-1);
+        Trie newChildTrie = new Trie(this.store, newChildSharedPath, this.value, this.left, this.right, this.valueLength, this.valueHash, this.childrenSize,null);
         NodeReference newChildReference = new NodeReference(this.store, newChildTrie, null,newChildTrie.getEncodedOfs());
 
         // this bit will be implicit and not present in a shared path
@@ -1111,7 +1120,7 @@ public class Trie {
             newRight = newChildReference;
         }
 
-        return new Trie(this.store, commonPath, null, newLeft, newRight, Uint24.ZERO, null, childrenSize,-1);
+        return new Trie(this.store, commonPath, null, newLeft, newRight, Uint24.ZERO, null, childrenSize,null);
     }
 
     public boolean isTerminal() {
@@ -1330,7 +1339,7 @@ public class Trie {
         return new VarInt(bytes, 0);
     }
 
-    public long getEncodedOfs() {
+    public EncodedObjectRef getEncodedOfs() {
         return encodedOfs;
     }
 
