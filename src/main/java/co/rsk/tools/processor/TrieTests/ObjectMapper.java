@@ -1,6 +1,7 @@
 package co.rsk.tools.processor.TrieTests;
 
 import co.rsk.crypto.Keccak256;
+import co.rsk.tools.processor.TrieTests.ohard.HardObjectMapper;
 import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
 import co.rsk.tools.processor.TrieTests.ohmap.ObjectHashMap;
 
@@ -13,7 +14,8 @@ public class ObjectMapper {
             //objectMapper = new SoftRefObjectMapper();
             //objectMapper = new ObjectHeap();
             //objectMapper = new ObjectHashMap();
-            objectMapper = null;
+            //objectMapper = null;
+            objectMapper = new HardObjectMapper();
         }
         return objectMapper;
     }

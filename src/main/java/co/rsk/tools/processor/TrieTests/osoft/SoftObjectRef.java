@@ -1,4 +1,6 @@
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.osoft;
+
+import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
 
 import java.lang.ref.SoftReference;
 

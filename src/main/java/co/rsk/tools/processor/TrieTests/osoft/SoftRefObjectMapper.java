@@ -1,4 +1,8 @@
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.osoft;
+
+import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
+import co.rsk.tools.processor.TrieTests.ObjectMapper;
+import co.rsk.tools.processor.TrieTests.ObjectReference;
 
 import java.nio.ByteBuffer;
 
@@ -14,8 +18,8 @@ public class SoftRefObjectMapper extends ObjectMapper {
         ObjectReference r = new ObjectReference();
         // If not present, must load from store.
         SoftObjectRefData data = sor.ref.get();
-        r.leftRef = data.leftOfs;
-        r.rightRef = data.rightOfs;
+        r.leftRef = data.leftRef;
+        r.rightRef = data.rightRef;
         r.len = data.encoded.length;
         r.message = ByteBuffer.wrap(data.encoded);
         return r;
