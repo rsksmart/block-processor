@@ -291,8 +291,8 @@ public class ObjectHeap extends ObjectMapper {
         return true;
     }
 
-    public void checkDuringRemap(EncodedObjectRef ref) {
-        checkDuringRemap(getOfs(ref));
+    public void checkDuringRemap(EncodedObjectRef encodedRef) {
+        checkDuringRemap(getOfs(encodedRef));
     }
 
     public void checkDuringRemap(long ofs) {
@@ -337,9 +337,9 @@ public class ObjectHeap extends ObjectMapper {
         checkDeugMagicWord(space,ofs);
     }
 
-    public EncodedObjectRef remap(EncodedObjectRef aofs,EncodedObjectRef aleftOfs,EncodedObjectRef arightOfs) {
-     long rightOfs = getOfs(arightOfs);
-     long leftOfs = getOfs(aleftOfs);
+    public EncodedObjectRef remap(EncodedObjectRef aofs, EncodedObjectRef aleftRef, EncodedObjectRef arightRef) {
+     long rightOfs = getOfs(arightRef);
+     long leftOfs = getOfs(aleftRef);
      long ofs = getOfs( aofs);
      return new LongEOR(remap(ofs,leftOfs,rightOfs));
     }
@@ -546,9 +546,9 @@ public class ObjectHeap extends ObjectMapper {
       return ((LongEOR) ref).ofs;
     }
 
-    public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftOfs, EncodedObjectRef rightOfs) {
-        long aLeftOfs = getOfs(leftOfs);
-        long aRightOfs = getOfs(rightOfs);
+    public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftRef, EncodedObjectRef rightRef) {
+        long aLeftOfs = getOfs(leftRef);
+        long aRightOfs = getOfs(rightRef);
         return (EncodedObjectRef) new LongEOR(add(encoded,aLeftOfs,aRightOfs));
     }
 
@@ -618,8 +618,8 @@ public class ObjectHeap extends ObjectMapper {
         return d;
     }
 
-    public ObjectReference retrieve(EncodedObjectRef encodedOfs) {
-        return retrieve(getOfs(encodedOfs));
+    public ObjectReference retrieve(EncodedObjectRef encodedRef) {
+        return retrieve(getOfs(encodedRef));
     }
 
     public ObjectReference retrieve(long encodedOfs) {
@@ -633,8 +633,8 @@ public class ObjectHeap extends ObjectMapper {
         // Get the max size window
         r.len = space.mem[internalOfs];
         checkDebugFooter(space,internalOfs+F3+r.len);
-        r.leftOfs= new LongEOR(ObjectIO.getLong5(space.mem, internalOfs+F1));
-        r.rightOfs=new LongEOR(ObjectIO.getLong5(space.mem, internalOfs+F2));
+        r.leftRef = new LongEOR(ObjectIO.getLong5(space.mem, internalOfs+F1));
+        r.rightRef =new LongEOR(ObjectIO.getLong5(space.mem, internalOfs+F2));
         r.message = ByteBuffer.wrap(space.mem,internalOfs+F3,r.len);
         return r;
     }

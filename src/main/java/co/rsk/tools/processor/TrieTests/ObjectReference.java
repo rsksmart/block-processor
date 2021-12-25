@@ -4,8 +4,8 @@ import java.nio.ByteBuffer;
 
 public class ObjectReference {
     public int len;
-    public EncodedObjectRef leftOfs;
-    public EncodedObjectRef rightOfs;
+    public EncodedObjectRef leftRef;
+    public EncodedObjectRef rightRef;
     public ByteBuffer message;
 
     public byte[] getAsArray() {

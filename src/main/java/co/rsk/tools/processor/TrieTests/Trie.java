@@ -9,7 +9,6 @@ import co.rsk.crypto.Keccak256;
 import co.rsk.metrics.profilers.Metric;
 import co.rsk.metrics.profilers.Profiler;
 import co.rsk.metrics.profilers.ProfilerFactory;
-import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
 import co.rsk.tools.processor.TrieUtils.PathEncoder;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 import org.ethereum.crypto.Keccak256Helper;
@@ -99,12 +98,12 @@ public class Trie {
     // shared Path
     private final TrieKeySlice sharedPath;
 
-    static boolean isCompressed = true;
+    static boolean tryToCompress = true;
 
-    EncodedObjectRef encodedOfs;
+    EncodedObjectRef encodedRef;
     boolean isEmbedded;
 
-    boolean reMapped = false;
+    //boolean reMapped = false;
 
     // default constructor, no secure
     public Trie() {
@@ -150,9 +149,13 @@ public class Trie {
         //ByteBuffer buffer = ByteBuffer.wrap(mem,memTop,mem.length-memTop);
         //serializeToByteBuffer(buffer);
         internalToMessage();
-        this.encodedOfs = ObjectMapper.get().add(encoded,
-                left.getEncodedOfs(),
-                right.getEncodedOfs());
+        ObjectMapper om = ObjectMapper.get();
+        if (om.getByHash()) {
+            this.encodedRef = om.add(encoded,getHash());
+        } else
+         this.encodedRef = om.add(encoded,
+                left.getEncodedRef(),
+                right.getEncodedRef());
         /*
         if (encodedOfs==47958557) {
             System.out.println("First position 1");
@@ -190,7 +193,7 @@ public class Trie {
         this.valueHash = valueHash;
         this.childrenSize = childrenSize;
         checkValueLength();
-        this.encodedOfs = aEncodedOfs;
+        this.encodedRef = aEncodedOfs;
         // New
         compressIfNecessary();
     }
@@ -204,7 +207,7 @@ public class Trie {
             }
             node.compressTree();
 
-            getNodeReference(k).setEncodedOfs(node.getEncodedOfs());
+            getNodeReference(k).setEncodedRef(node.getEncodedRef());
         }
         remapEncoding();
     }
@@ -229,7 +232,7 @@ public class Trie {
 
     void checkReference() {
         if (!isEmbedded) {
-            ObjectMapper.get().checkDuringRemap(encodedOfs);// left.getEncodedOfs(), right.getEncodedOfs());
+            ObjectMapper.get().checkDuringRemap(encodedRef);// left.getEncodedOfs(), right.getEncodedOfs());
         }
 
     }
@@ -242,7 +245,7 @@ public class Trie {
 
          */
         if (!isEmbedded) {
-            encodedOfs = ObjectMapper.get().remap(encodedOfs, left.getEncodedOfs(), right.getEncodedOfs());
+            encodedRef = ObjectMapper.get().remap(encodedRef, left.getEncodedRef(), right.getEncodedRef());
         }
         /*
         if (encodedOfs==47958557) {
@@ -256,19 +259,21 @@ public class Trie {
         }
 
          */
-        reMapped = true;
+        //reMapped = true;
     }
 
     public static Trie retrieveNode(EncodedObjectRef encodedOfs) {
         //byte[] data = ObjectHeap.get().retrieveData(encodedOfs);
         ObjectReference r = ObjectMapper.get().retrieve(encodedOfs);
-        Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftOfs, r.rightOfs, null);
+        Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftRef, r.rightRef, null);
         return node;
     }
     public void compressIfNecessary() {
-        if (!isCompressed) return;
+        if (!tryToCompress) return;
         if (isEmbedded) return;
-        if (encodedOfs==null)
+        if (ObjectMapper.get()==null)
+            return;
+        if (encodedRef ==null)
             storeNodeInMem();
         if (!this.left.isEmbeddable())
             this.left.removeLazyNode();
@@ -1046,7 +1051,7 @@ public class Trie {
                     getDataLength(value),
                     null,
                     this.childrenSize,
-                    this.encodedOfs // TO DO: REALLY ??? check this
+                    this.encodedRef // TO DO: REALLY ??? check this
             );
         }
 
@@ -1072,7 +1077,7 @@ public class Trie {
 
         VarInt childrenSize = this.childrenSize;
 
-        NodeReference newNodeReference = new NodeReference(this.store, newNode, null,newNode.getEncodedOfs());
+        NodeReference newNodeReference = new NodeReference(this.store, newNode, null,newNode.getEncodedRef());
         NodeReference newLeft;
         NodeReference newRight;
         if (pos == 0) {
@@ -1104,7 +1109,7 @@ public class Trie {
         int commonPathLength = commonPath.length();
         TrieKeySlice newChildSharedPath = sharedPath.slice(commonPathLength + 1, sharedPath.length());
         Trie newChildTrie = new Trie(this.store, newChildSharedPath, this.value, this.left, this.right, this.valueLength, this.valueHash, this.childrenSize,null);
-        NodeReference newChildReference = new NodeReference(this.store, newChildTrie, null,newChildTrie.getEncodedOfs());
+        NodeReference newChildReference = new NodeReference(this.store, newChildTrie, null,newChildTrie.getEncodedRef());
 
         // this bit will be implicit and not present in a shared path
         byte pos = sharedPath.get(commonPathLength);
@@ -1339,8 +1344,8 @@ public class Trie {
         return new VarInt(bytes, 0);
     }
 
-    public EncodedObjectRef getEncodedOfs() {
-        return encodedOfs;
+    public EncodedObjectRef getEncodedRef() {
+        return encodedRef;
     }
 
     // Additional auxiliary methods for Merkle Proof

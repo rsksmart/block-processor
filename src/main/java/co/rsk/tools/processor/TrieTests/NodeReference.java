@@ -20,7 +20,7 @@ package co.rsk.tools.processor.TrieTests;
 import co.rsk.core.types.ints.Uint8;
 import co.rsk.crypto.Keccak256;
 
-import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
+import co.rsk.tools.processor.TrieTests.ohmap.HashEOR;
 import org.ethereum.crypto.Keccak256Helper;
 
 import java.nio.ByteBuffer;
@@ -34,29 +34,29 @@ public class NodeReference {
 
     private Trie lazyNode;
     private Keccak256 lazyHash;
-    private EncodedObjectRef encodedOfs;
+    private EncodedObjectRef encodedRef;
 
-    public EncodedObjectRef getEncodedOfs() {
-        if ((encodedOfs == null) && (lazyNode!=null)) {
+    public EncodedObjectRef getEncodedRef() {
+        if ((encodedRef == null) && (lazyNode!=null)) {
             // it may have not been computed.
             // This happens when creating tries by hand (and not specifying the
             // encodeOfs argument in the constructor)
-            encodedOfs = lazyNode.getEncodedOfs();
+            encodedRef = lazyNode.getEncodedRef();
         }
-        return encodedOfs;
+        return encodedRef;
     }
 
     public void checkRerefence() {
-        ObjectMapper.get().checkDuringRemap(encodedOfs );
+        ObjectMapper.get().checkDuringRemap(encodedRef);
     }
 
-    public void setEncodedOfs(EncodedObjectRef ofs) {
-        encodedOfs = ofs;
+    public void setEncodedRef(EncodedObjectRef ofs) {
+        encodedRef = ofs;
         ObjectMapper.get().verifyEOR(ofs);
     }
 
     public void recomputeEncodeOfs() {
-        encodedOfs = getNode().get().getEncodedOfs();
+        encodedRef = getNode().get().getEncodedRef();
     }
 
     public NodeReference(TrieStore store,  Trie node, Keccak256 hash,
@@ -73,18 +73,23 @@ public class NodeReference {
             }
         }
 
-     this.encodedOfs = aEndodedOfs;
+     this.encodedRef = aEndodedOfs;
 
-        ObjectMapper.get().verifyEOR(aEndodedOfs);
+        if (ObjectMapper.get()!=null) {
+            ObjectMapper.get().verifyEOR(aEndodedOfs);
+        }
     }
 
     public Trie getDynamicLazyNode() {
-        if (encodedOfs==null) return null;
-        ObjectReference r  = ObjectMapper.get().retrieve(encodedOfs);
+        if (ObjectMapper.get().getByHash()) {
+            encodedRef = new HashEOR(lazyHash);
+        }
+        if (encodedRef ==null) return null;
+        ObjectReference r  = ObjectMapper.get().retrieve(encodedRef);
         try {
             //if (encodedOfs==161722718)
             //    encodedOfs=encodedOfs;
-            Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftOfs, r.rightOfs, store);
+            Trie node = Trie.fromMessage(r.message, encodedRef, r.leftRef, r.rightRef, store);
             return node;
         } catch (java.nio.BufferUnderflowException e) {
             //encodeOfs: 3386664381
@@ -118,7 +123,7 @@ public class NodeReference {
         if (lazyNode != null) {
             return Optional.of(lazyNode);
         }
-        if (encodedOfs!=null) {
+        if ((encodedRef !=null) || (ObjectMapper.get().getByHash() && (lazyHash !=null))) {
             if (persistent) {
                 lazyNode = getDynamicLazyNode();
                 return Optional.of(lazyNode);
@@ -126,6 +131,7 @@ public class NodeReference {
                 return Optional.of(getDynamicLazyNode());
 
         }
+
 
 
         if (lazyHash == null) {
@@ -158,7 +164,7 @@ public class NodeReference {
 
         if (lazyNode == null) {
 
-            if (encodedOfs!=null) {
+            if (encodedRef !=null) {
                 // This should not happen.
                 // If lazyNode is null, then the lazyHash should be set.
                 return Optional.of(getDynamicLazyNode().getHash());
@@ -187,9 +193,9 @@ public class NodeReference {
     }
 
     private byte[] getMessageFromMem() {
-        if (encodedOfs==null)
+        if (encodedRef ==null)
             return null;
-        ObjectReference r = ObjectMapper.get().retrieve(encodedOfs);
+        ObjectReference r = ObjectMapper.get().retrieve(encodedRef);
         return r.getAsArray();
     }
 
@@ -256,7 +262,7 @@ public class NodeReference {
     public void removeLazyNode() {
         // If I remove the node, I keep the offset to retrieve
         if (lazyNode!=null) {
-            encodedOfs = lazyNode.getEncodedOfs();
+            encodedRef = lazyNode.getEncodedRef();
             lazyNode = null; // bye bye
         }
     }

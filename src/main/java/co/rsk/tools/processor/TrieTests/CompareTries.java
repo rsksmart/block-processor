@@ -352,8 +352,8 @@ public class CompareTries {
         byte[] s1  = new byte[100];
         long s1o = ms.add(s1,leftOfs,rightOfs);
         ObjectReference s1ref = ms.retrieve(s1o);
-        myassert (((LongEOR) s1ref.leftOfs).ofs==leftOfs);
-        myassert (((LongEOR) s1ref.rightOfs).ofs==rightOfs);
+        myassert (((LongEOR) s1ref.leftRef).ofs==leftOfs);
+        myassert (((LongEOR) s1ref.rightRef).ofs==rightOfs);
         myassert (s1ref.len==s1.length);
         myassert (Arrays.equals(s1ref.getAsArray(),s1));
 
@@ -364,7 +364,16 @@ public class CompareTries {
 
     public void smallWorldTest() {
         ObjectHeap.default_spaceMegabytes = 500;
+        //TrieKeySliceFactoryInstance.setTrieKeySliceFactory(CompactTrieKeySlice.getFactory());
+        TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
+
+        System.out.println("TrieKeySliceFactory classname: "+TrieKeySliceFactoryInstance.get().getClass().getName());
         ObjectMapper.get();
+        if (ObjectMapper.get()==null)
+            System.out.println("ObjectMapper not present");
+        else
+            System.out.println("ObjectMapper classname: "+ObjectMapper.get().getClass().getName());
+
         max = 16L * (1 << 20);
         buildbottomUp();
         //ObjectHeap.get().save("16M",c.t.getEncodedOfs());
@@ -396,7 +405,7 @@ public class CompareTries {
             max = 16L * (1 << 20);
             buildbottomUp();
             ObjectHeap.get().save("16M",
-                    ((LongEOR) rootNode.getEncodedOfs()).ofs);
+                    ((LongEOR) rootNode.getEncodedRef()).ofs);
             System.exit(0);
             ObjectHeap.get().reset();
 
@@ -414,7 +423,7 @@ public class CompareTries {
 
     public static Trie retrieveNode(EncodedObjectRef encodedOfs) {
         ObjectReference r = ObjectMapper.get().retrieve(encodedOfs);
-        Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftOfs, r.rightOfs, null);
+        Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftRef, r.rightRef, null);
         return node;
     }
 }
