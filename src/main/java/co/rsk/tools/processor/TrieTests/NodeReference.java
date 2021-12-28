@@ -47,12 +47,12 @@ public class NodeReference {
     }
 
     public void checkRerefence() {
-        ObjectMapper.get().checkDuringRemap(encodedRef);
+        EncodedObjectStore.get().checkDuringRemap(encodedRef);
     }
 
     public void setEncodedRef(EncodedObjectRef ofs) {
         encodedRef = ofs;
-        ObjectMapper.get().verifyEOR(ofs);
+        EncodedObjectStore.get().verifyEOR(ofs);
     }
 
     public void recomputeEncodeOfs() {
@@ -75,17 +75,17 @@ public class NodeReference {
 
      this.encodedRef = aEndodedOfs;
 
-        if (ObjectMapper.get()!=null) {
-            ObjectMapper.get().verifyEOR(aEndodedOfs);
+        if (EncodedObjectStore.get()!=null) {
+            EncodedObjectStore.get().verifyEOR(aEndodedOfs);
         }
     }
 
     public Trie getDynamicLazyNode() {
-        if (ObjectMapper.get().getByHash()) {
+        if (EncodedObjectStore.get().getByHash()) {
             encodedRef = new HashEOR(lazyHash);
         }
         if (encodedRef ==null) return null;
-        ObjectReference r  = ObjectMapper.get().retrieve(encodedRef);
+        ObjectReference r  = EncodedObjectStore.get().retrieve(encodedRef);
         try {
             //if (encodedOfs==161722718)
             //    encodedOfs=encodedOfs;
@@ -123,7 +123,7 @@ public class NodeReference {
         if (lazyNode != null) {
             return Optional.of(lazyNode);
         }
-        if ((encodedRef !=null) || (ObjectMapper.get().getByHash() && (lazyHash !=null))) {
+        if ((encodedRef !=null) || (EncodedObjectStore.get().getByHash() && (lazyHash !=null))) {
             if (persistent) {
                 lazyNode = getDynamicLazyNode();
                 return Optional.of(lazyNode);
@@ -195,7 +195,7 @@ public class NodeReference {
     private byte[] getMessageFromMem() {
         if (encodedRef ==null)
             return null;
-        ObjectReference r = ObjectMapper.get().retrieve(encodedRef);
+        ObjectReference r = EncodedObjectStore.get().retrieve(encodedRef);
         return r.getAsArray();
     }
 

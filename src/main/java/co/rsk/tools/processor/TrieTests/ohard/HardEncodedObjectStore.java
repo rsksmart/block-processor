@@ -1,13 +1,13 @@
 package co.rsk.tools.processor.TrieTests.ohard;
 
 import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.ObjectMapper;
+import co.rsk.tools.processor.TrieTests.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.ObjectReference;
 
 
 import java.nio.ByteBuffer;
 
-public class HardObjectMapper extends ObjectMapper {
+public class HardEncodedObjectStore extends EncodedObjectStore {
 
     public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftRef, EncodedObjectRef rightRef) {
         return new HardObjectRef(encoded, leftRef, rightRef);

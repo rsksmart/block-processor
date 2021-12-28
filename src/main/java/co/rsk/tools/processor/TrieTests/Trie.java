@@ -144,12 +144,12 @@ public class Trie {
 
 
     private void storeNodeInMem() {
-        if (ObjectMapper.get().isRemapping())
+        if (EncodedObjectStore.get().isRemapping())
             throw new RuntimeException("Should never encode nodes during remapping");
         //ByteBuffer buffer = ByteBuffer.wrap(mem,memTop,mem.length-memTop);
         //serializeToByteBuffer(buffer);
         internalToMessage();
-        ObjectMapper om = ObjectMapper.get();
+        EncodedObjectStore om = EncodedObjectStore.get();
         if (om.getByHash()) {
             this.encodedRef = om.add(encoded,getHash());
         } else
@@ -232,7 +232,7 @@ public class Trie {
 
     void checkReference() {
         if (!isEmbedded) {
-            ObjectMapper.get().checkDuringRemap(encodedRef);// left.getEncodedOfs(), right.getEncodedOfs());
+            EncodedObjectStore.get().checkDuringRemap(encodedRef);// left.getEncodedOfs(), right.getEncodedOfs());
         }
 
     }
@@ -245,7 +245,7 @@ public class Trie {
 
          */
         if (!isEmbedded) {
-            encodedRef = ObjectMapper.get().remap(encodedRef, left.getEncodedRef(), right.getEncodedRef());
+            encodedRef = EncodedObjectStore.get().remap(encodedRef, left.getEncodedRef(), right.getEncodedRef());
         }
         /*
         if (encodedOfs==47958557) {
@@ -264,14 +264,14 @@ public class Trie {
 
     public static Trie retrieveNode(EncodedObjectRef encodedOfs) {
         //byte[] data = ObjectHeap.get().retrieveData(encodedOfs);
-        ObjectReference r = ObjectMapper.get().retrieve(encodedOfs);
+        ObjectReference r = EncodedObjectStore.get().retrieve(encodedOfs);
         Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftRef, r.rightRef, null);
         return node;
     }
     public void compressIfNecessary() {
         if (!tryToCompress) return;
         if (isEmbedded) return;
-        if (ObjectMapper.get()==null)
+        if (EncodedObjectStore.get()==null)
             return;
         if (encodedRef ==null)
             storeNodeInMem();

@@ -5,7 +5,7 @@ package co.rsk.tools.processor.TrieTests;
 import co.rsk.core.Coin;
 import co.rsk.core.types.ints.Uint24;
 import co.rsk.tools.processor.TrieTests.oheap.LongEOR;
-import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
+import co.rsk.tools.processor.TrieTests.oheap.EncodedObjectHeap;
 import co.rsk.tools.processor.TrieUtils.ExpandedTrieKeySlice;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 import org.ethereum.core.AccountState;
@@ -19,7 +19,7 @@ public class CompareTries {
     int valueSize;
     int keySize;
     long max = 32L*(1<<20);// 8 Million nodes // 1_000_000;
-    ObjectMapper ms;
+    EncodedObjectStore ms;
     long remapTime =0;
     long remapTimeBelow50 =0;
     long remapTimeOver50 =0;
@@ -53,7 +53,7 @@ public class CompareTries {
         System.out.println("keysize: "+keySize);
         System.out.println("valueSize: "+valueSize);
 
-        ms = ObjectMapper.get();
+        ms = EncodedObjectStore.get();
         remapTime=0;
         remapTimeBelow50 =0;
         remapTimeOver50 =0;
@@ -70,10 +70,10 @@ public class CompareTries {
     }
 
     public void printMemStatsShort() {
-        if (!(ms instanceof ObjectHeap))
+        if (!(ms instanceof EncodedObjectHeap))
             return;
 
-        ObjectHeap ms = (ObjectHeap) this.ms;
+        EncodedObjectHeap ms = (EncodedObjectHeap) this.ms;
 
         System.out.println("InMemStore usage[%]: " + ms.getUsagePercent());
         System.out.println("InMemStore usage[Mb]: " + ms.getMemUsed() / 1000 / 1000);
@@ -86,10 +86,10 @@ public class CompareTries {
     }
 
     public void printMemStats(String s) {
-            if (!(ms instanceof ObjectHeap))
+            if (!(ms instanceof EncodedObjectHeap))
                 return;
 
-            ObjectHeap ms = (ObjectHeap) this.ms;
+            EncodedObjectHeap ms = (EncodedObjectHeap) this.ms;
             System.out.println(s+" InMemStore usage[%]: " + ms.getUsagePercent());
             System.out.println(s+" InMemStore usage[Mb]: " + ms.getMemUsed() / 1000 / 1000);
             System.out.println(s+" InMemStore alloc[Mb]: " + ms.getMemAllocated() / 1000 / 1000);
@@ -115,10 +115,10 @@ public class CompareTries {
     }
 
     public void garbageCollection(Trie t) {
-        if (!(ms instanceof ObjectHeap))
+        if (!(ms instanceof EncodedObjectHeap))
             return;
 
-        ObjectHeap ms = (ObjectHeap) this.ms;
+        EncodedObjectHeap ms = (EncodedObjectHeap) this.ms;
 
         System.out.println(":::::::::::::::::::::::::::::::::::::");
         System.out.println(":: Remapping from: "+ms.getUsagePercent()+"%");
@@ -178,10 +178,10 @@ public class CompareTries {
     }
 
    public boolean shouldRunGC() {
-       if (!(ms instanceof ObjectHeap))
+       if (!(ms instanceof EncodedObjectHeap))
            return false;
 
-       ObjectHeap ms = (ObjectHeap) this.ms;
+       EncodedObjectHeap ms = (EncodedObjectHeap) this.ms;
        return ms.heapIsAlmostFull();
    }
 
@@ -346,7 +346,7 @@ public class CompareTries {
             throw new RuntimeException("Invalid assertion");
     }
     public static void testInMemStore() {
-        ObjectHeap ms  = ObjectHeap.get();
+        EncodedObjectHeap ms  = EncodedObjectHeap.get();
         long leftOfs = ms.buildPointer(ms.getCurSpaceNum(),1000);
         long rightOfs = ms.buildPointer(ms.getCurSpaceNum(),2000);
         byte[] s1  = new byte[100];
@@ -363,27 +363,30 @@ public class CompareTries {
 
 
     public void smallWorldTest() {
-        ObjectHeap.default_spaceMegabytes = 500;
+        EncodedObjectHeap.default_spaceMegabytes = 500;
         //TrieKeySliceFactoryInstance.setTrieKeySliceFactory(CompactTrieKeySlice.getFactory());
         TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
 
         System.out.println("TrieKeySliceFactory classname: "+TrieKeySliceFactoryInstance.get().getClass().getName());
-        ObjectMapper.get();
-        if (ObjectMapper.get()==null)
+        EncodedObjectStore.get();
+        if (EncodedObjectStore.get()==null)
             System.out.println("ObjectMapper not present");
         else
-            System.out.println("ObjectMapper classname: "+ObjectMapper.get().getClass().getName());
+            System.out.println("ObjectMapper classname: "+ EncodedObjectStore.get().getClass().getName());
 
+        // Create a high number of accounts bottom-up
+        // This is a much faster method, as it doesn't create waste in
+        // memory and doesn't trigger neither our GC (and probably it
+        // doesn't trigger Java's GC often)
         max = 16L * (1 << 20);
         buildbottomUp();
-        //ObjectHeap.get().save("16M",c.t.getEncodedOfs());
-       //   System.exit(0);
-        //ObjectHeap.get().reset();
-        //long rootOfs = ObjectHeap.get().load("4M");
-        //t = retrieveNode(rootOfs);
-
         countNodes(rootNode);
         System.exit(0);
+
+        // Add another number of accounts, but this time by inserting
+        // elements in the trie. This is slower, and creates unused nodes
+        // that our GC must collect. It also creates a high number of temporal
+        // Java objects that the Java GC need to periodically collect.
         // now add another 8M items to it!
         max = 1L*(1<<20);
         buildByInsertion();
@@ -404,14 +407,14 @@ public class CompareTries {
         if (create) {
             max = 16L * (1 << 20);
             buildbottomUp();
-            ObjectHeap.get().save("16M",
+            EncodedObjectHeap.get().save("16M",
                     ((LongEOR) rootNode.getEncodedRef()).ofs);
             System.exit(0);
-            ObjectHeap.get().reset();
+            EncodedObjectHeap.get().reset();
 
         }
 
-        long rootOfs = ObjectHeap.get().load("4M");
+        long rootOfs = EncodedObjectHeap.get().load("4M");
         rootNode = retrieveNode(new LongEOR(rootOfs));
         countNodes(rootNode);
         System.exit(0);
@@ -422,7 +425,7 @@ public class CompareTries {
 
 
     public static Trie retrieveNode(EncodedObjectRef encodedOfs) {
-        ObjectReference r = ObjectMapper.get().retrieve(encodedOfs);
+        ObjectReference r = EncodedObjectStore.get().retrieve(encodedOfs);
         Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftRef, r.rightRef, null);
         return node;
     }

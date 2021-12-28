@@ -2,14 +2,14 @@ package co.rsk.tools.processor.TrieTests.ohmap;
 
 import co.rsk.crypto.Keccak256;
 import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.ObjectMapper;
+import co.rsk.tools.processor.TrieTests.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.ObjectReference;
 import org.ethereum.db.ByteArrayWrapper;
 
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 
-public class ObjectHashMap extends ObjectMapper  {
+public class EncodedObjectHashMap extends EncodedObjectStore {
 
     HashMap<Keccak256, ByteArrayWrapper> map = new HashMap<>();
 

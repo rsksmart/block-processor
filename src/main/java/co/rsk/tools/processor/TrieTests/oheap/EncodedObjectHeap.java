@@ -1,7 +1,7 @@
 package co.rsk.tools.processor.TrieTests.oheap;
 
 import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.ObjectMapper;
+import co.rsk.tools.processor.TrieTests.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.ObjectReference;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
 
@@ -9,7 +9,7 @@ import java.nio.ByteBuffer;
 import java.util.BitSet;
 
 
-public class ObjectHeap extends ObjectMapper {
+public class EncodedObjectHeap extends EncodedObjectStore {
     public static  int default_spaceMegabytes = 1600;
     public static  int default_maxSpaces = 4;
     public static  int default_freeSpaces =2;
@@ -30,7 +30,7 @@ public class ObjectHeap extends ObjectMapper {
     static final int F2 = 6; // field 2 is 5 bytes in length
     static final int F3 = 11;
 
-    public ObjectHeap() {
+    public EncodedObjectHeap() {
         megas = default_spaceMegabytes;
         maxSpaces =  default_maxSpaces;
         freeSpaces = default_freeSpaces;
@@ -172,7 +172,7 @@ public class ObjectHeap extends ObjectMapper {
         }
     }
 
-    static ObjectHeap objectHeap ;
+    static EncodedObjectHeap objectHeap ;
     // Static 1 gigabyte. //100 megabytes
 
     public Space[] spaces;
@@ -187,9 +187,9 @@ public class ObjectHeap extends ObjectMapper {
     long remappedSize;
     int compressionPercent;
 
-    public static ObjectHeap get() {
+    public static EncodedObjectHeap get() {
         if (objectHeap==null)
-            objectHeap= new ObjectHeap();
+            objectHeap= new EncodedObjectHeap();
 
         return objectHeap;
     }

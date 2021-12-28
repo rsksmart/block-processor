@@ -1,23 +1,22 @@
 package co.rsk.tools.processor.TrieTests;
 
 import co.rsk.crypto.Keccak256;
-import co.rsk.tools.processor.TrieTests.ohard.HardObjectMapper;
-import co.rsk.tools.processor.TrieTests.oheap.ObjectHeap;
-import co.rsk.tools.processor.TrieTests.ohmap.ObjectHashMap;
+import co.rsk.tools.processor.TrieTests.omsoft.MultiSoftEncodedObjectStore;
 
-public class ObjectMapper {
+public class EncodedObjectStore {
 
-    static ObjectMapper objectMapper;
+    static EncodedObjectStore encodedObjectStore;
 
-    public static ObjectMapper get() {
-        if (objectMapper == null) {
+    public static EncodedObjectStore get() {
+        if (encodedObjectStore == null) {
             //objectMapper = new SoftRefObjectMapper();
             //objectMapper = new ObjectHeap();
             //objectMapper = new ObjectHashMap();
             //objectMapper = null;
-            objectMapper = new HardObjectMapper();
+            //objectMapper = new HardObjectMapper();
+            encodedObjectStore = new MultiSoftEncodedObjectStore();
         }
-        return objectMapper;
+        return encodedObjectStore;
     }
 
 
