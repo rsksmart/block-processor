@@ -1,6 +1,6 @@
 
 
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.Unitrie;
 
 import co.rsk.core.types.ints.Uint16;
 import co.rsk.core.types.ints.Uint24;
@@ -144,13 +144,13 @@ public class Trie {
 
 
     private void storeNodeInMem() {
-        if (EncodedObjectStore.get().isRemapping())
+        if (GlobalEncodedObjectStore.get().isRemapping())
             throw new RuntimeException("Should never encode nodes during remapping");
         //ByteBuffer buffer = ByteBuffer.wrap(mem,memTop,mem.length-memTop);
         //serializeToByteBuffer(buffer);
         internalToMessage();
-        EncodedObjectStore om = EncodedObjectStore.get();
-        if (om.getByHash()) {
+        EncodedObjectStore om = GlobalEncodedObjectStore.get();
+        if (om.accessByHash()) {
             this.encodedRef = om.add(encoded,getHash());
         } else
          this.encodedRef = om.add(encoded,
@@ -232,7 +232,7 @@ public class Trie {
 
     void checkReference() {
         if (!isEmbedded) {
-            EncodedObjectStore.get().checkDuringRemap(encodedRef);// left.getEncodedOfs(), right.getEncodedOfs());
+            GlobalEncodedObjectStore.get().checkDuringRemap(encodedRef);// left.getEncodedOfs(), right.getEncodedOfs());
         }
 
     }
@@ -245,7 +245,7 @@ public class Trie {
 
          */
         if (!isEmbedded) {
-            encodedRef = EncodedObjectStore.get().remap(encodedRef, left.getEncodedRef(), right.getEncodedRef());
+            encodedRef = GlobalEncodedObjectStore.get().remap(encodedRef, left.getEncodedRef(), right.getEncodedRef());
         }
         /*
         if (encodedOfs==47958557) {
@@ -264,14 +264,14 @@ public class Trie {
 
     public static Trie retrieveNode(EncodedObjectRef encodedOfs) {
         //byte[] data = ObjectHeap.get().retrieveData(encodedOfs);
-        ObjectReference r = EncodedObjectStore.get().retrieve(encodedOfs);
+        ObjectReference r = GlobalEncodedObjectStore.get().retrieve(encodedOfs);
         Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftRef, r.rightRef, null);
         return node;
     }
     public void compressIfNecessary() {
         if (!tryToCompress) return;
         if (isEmbedded) return;
-        if (EncodedObjectStore.get()==null)
+        if (GlobalEncodedObjectStore.get()==null)
             return;
         if (encodedRef ==null)
             storeNodeInMem();

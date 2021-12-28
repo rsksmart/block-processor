@@ -1,4 +1,4 @@
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.Unitrie;
 
 import co.rsk.core.RskAddress;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
@@ -14,7 +14,7 @@ public class PreOrderIterator implements Iterator<IterationElement> {
         private final Deque<IterationElement> visiting;
         private boolean stopAtAccountDepth;
 
-        public PreOrderIterator(Trie root,boolean stopAtAccountDepth) {
+        public PreOrderIterator(Trie root, boolean stopAtAccountDepth) {
             Objects.requireNonNull(root);
             this.stopAtAccountDepth = stopAtAccountDepth;
             TrieKeySlice traversedPath = root.getSharedPath();

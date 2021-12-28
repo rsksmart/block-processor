@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.Unitrie;
 
 import co.rsk.core.types.ints.Uint8;
 import co.rsk.crypto.Keccak256;
@@ -47,12 +47,12 @@ public class NodeReference {
     }
 
     public void checkRerefence() {
-        EncodedObjectStore.get().checkDuringRemap(encodedRef);
+        GlobalEncodedObjectStore.get().checkDuringRemap(encodedRef);
     }
 
     public void setEncodedRef(EncodedObjectRef ofs) {
         encodedRef = ofs;
-        EncodedObjectStore.get().verifyEOR(ofs);
+        GlobalEncodedObjectStore.get().verifyEOR(ofs);
     }
 
     public void recomputeEncodeOfs() {
@@ -75,17 +75,17 @@ public class NodeReference {
 
      this.encodedRef = aEndodedOfs;
 
-        if (EncodedObjectStore.get()!=null) {
-            EncodedObjectStore.get().verifyEOR(aEndodedOfs);
+        if (GlobalEncodedObjectStore.get()!=null) {
+            GlobalEncodedObjectStore.get().verifyEOR(aEndodedOfs);
         }
     }
 
     public Trie getDynamicLazyNode() {
-        if (EncodedObjectStore.get().getByHash()) {
+        if (GlobalEncodedObjectStore.get().accessByHash()) {
             encodedRef = new HashEOR(lazyHash);
         }
         if (encodedRef ==null) return null;
-        ObjectReference r  = EncodedObjectStore.get().retrieve(encodedRef);
+        ObjectReference r  = GlobalEncodedObjectStore.get().retrieve(encodedRef);
         try {
             //if (encodedOfs==161722718)
             //    encodedOfs=encodedOfs;
@@ -123,7 +123,7 @@ public class NodeReference {
         if (lazyNode != null) {
             return Optional.of(lazyNode);
         }
-        if ((encodedRef !=null) || (EncodedObjectStore.get().getByHash() && (lazyHash !=null))) {
+        if ((encodedRef !=null) || (GlobalEncodedObjectStore.get().accessByHash() && (lazyHash !=null))) {
             if (persistent) {
                 lazyNode = getDynamicLazyNode();
                 return Optional.of(lazyNode);
@@ -195,7 +195,7 @@ public class NodeReference {
     private byte[] getMessageFromMem() {
         if (encodedRef ==null)
             return null;
-        ObjectReference r = EncodedObjectStore.get().retrieve(encodedRef);
+        ObjectReference r = GlobalEncodedObjectStore.get().retrieve(encodedRef);
         return r.getAsArray();
     }
 

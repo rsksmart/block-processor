@@ -1,7 +1,6 @@
 package co.rsk.tools.processor.TrieTests.ohard;
 
-import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.osoft.SoftObjectRefData;
+import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
 
 
 public class HardObjectRef extends EncodedObjectRef {

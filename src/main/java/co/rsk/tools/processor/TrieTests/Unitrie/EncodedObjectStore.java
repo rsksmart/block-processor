@@ -1,30 +1,15 @@
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.Unitrie;
 
 import co.rsk.crypto.Keccak256;
-import co.rsk.tools.processor.TrieTests.omsoft.MultiSoftEncodedObjectStore;
 
 public class EncodedObjectStore {
-
-    static EncodedObjectStore encodedObjectStore;
-
-    public static EncodedObjectStore get() {
-        if (encodedObjectStore == null) {
-            //objectMapper = new SoftRefObjectMapper();
-            //objectMapper = new ObjectHeap();
-            //objectMapper = new ObjectHashMap();
-            //objectMapper = null;
-            //objectMapper = new HardObjectMapper();
-            encodedObjectStore = new MultiSoftEncodedObjectStore();
-        }
-        return encodedObjectStore;
-    }
 
 
     public void verifyEOR(EncodedObjectRef ref) {
 
     }
 
-    public boolean getByHash() {
+    public boolean accessByHash() {
         return false;
     }
 
@@ -38,10 +23,14 @@ public class EncodedObjectStore {
 
 
     public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftRef, EncodedObjectRef rightRef) {
+        if (accessByHash())
+            throw new RuntimeException("invalid access");
         return null;
     }
 
     public EncodedObjectRef add(byte[] encoded, Keccak256 hash) {
+        if (!accessByHash())
+            throw new RuntimeException("invalid access");
         return null;
     }
 

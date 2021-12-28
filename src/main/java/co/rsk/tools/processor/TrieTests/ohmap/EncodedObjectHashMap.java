@@ -1,9 +1,9 @@
 package co.rsk.tools.processor.TrieTests.ohmap;
 
 import co.rsk.crypto.Keccak256;
-import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.EncodedObjectStore;
-import co.rsk.tools.processor.TrieTests.ObjectReference;
+import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
+import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.ObjectReference;
 import org.ethereum.db.ByteArrayWrapper;
 
 import java.nio.ByteBuffer;
@@ -13,7 +13,7 @@ public class EncodedObjectHashMap extends EncodedObjectStore {
 
     HashMap<Keccak256, ByteArrayWrapper> map = new HashMap<>();
 
-    public boolean getByHash() {
+    public boolean accessByHash() {
         return true;
     }
     public EncodedObjectRef add(byte[] encoded, Keccak256 hash) {

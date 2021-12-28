@@ -1,7 +1,7 @@
 package co.rsk.tools.processor.TrieTests.ohmap;
 
 import co.rsk.crypto.Keccak256;
-import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
+import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
 
 public class HashEOR extends EncodedObjectRef {
     Keccak256 hash;

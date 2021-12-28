@@ -1,8 +1,8 @@
 package co.rsk.tools.processor.TrieTests.oheap;
 
-import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.EncodedObjectStore;
-import co.rsk.tools.processor.TrieTests.ObjectReference;
+import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
+import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.ObjectReference;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
 
 import java.nio.ByteBuffer;

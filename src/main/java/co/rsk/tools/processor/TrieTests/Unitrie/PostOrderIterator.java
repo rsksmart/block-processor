@@ -1,4 +1,4 @@
-package co.rsk.tools.processor.TrieTests;
+package co.rsk.tools.processor.TrieTests.Unitrie;
 
 
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;

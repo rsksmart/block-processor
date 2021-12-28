@@ -1,6 +1,6 @@
 package co.rsk.tools.processor.TrieTests.oheap;
 
-import co.rsk.tools.processor.TrieTests.EncodedObjectRef;
+import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
 
 public class LongEOR extends EncodedObjectRef {
     public long ofs;

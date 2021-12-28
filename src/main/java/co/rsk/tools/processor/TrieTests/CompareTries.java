@@ -4,6 +4,7 @@ package co.rsk.tools.processor.TrieTests;
 
 import co.rsk.core.Coin;
 import co.rsk.core.types.ints.Uint24;
+import co.rsk.tools.processor.TrieTests.Unitrie.*;
 import co.rsk.tools.processor.TrieTests.oheap.LongEOR;
 import co.rsk.tools.processor.TrieTests.oheap.EncodedObjectHeap;
 import co.rsk.tools.processor.TrieUtils.ExpandedTrieKeySlice;
@@ -53,7 +54,7 @@ public class CompareTries {
         System.out.println("keysize: "+keySize);
         System.out.println("valueSize: "+valueSize);
 
-        ms = EncodedObjectStore.get();
+        ms = GlobalEncodedObjectStore.get();
         remapTime=0;
         remapTimeBelow50 =0;
         remapTimeOver50 =0;
@@ -361,18 +362,31 @@ public class CompareTries {
 
     }
 
-
     public void smallWorldTest() {
+        EncodedObjectStore encodedObjectStore;
+        // Here you have to choose one encoded object store.
+        // uncomment a single line from the lines below:
+
+        //encodedObjectStore = new SoftRefEncodedObjectStore();
+        encodedObjectStore = new EncodedObjectHeap();
+        //encodedObjectStore = new EncodedObjectHashMap();
+        //encodedObjectStore = new HardEncodedObjectStore();
+        //encodedObjectStore = new MultiSoftEncodedObjectStore();
+        smallWorldTest(encodedObjectStore);
+    }
+
+    public void smallWorldTest(EncodedObjectStore encodedObjectStore) {
+        GlobalEncodedObjectStore.set(encodedObjectStore);
         EncodedObjectHeap.default_spaceMegabytes = 500;
         //TrieKeySliceFactoryInstance.setTrieKeySliceFactory(CompactTrieKeySlice.getFactory());
         TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
 
         System.out.println("TrieKeySliceFactory classname: "+TrieKeySliceFactoryInstance.get().getClass().getName());
-        EncodedObjectStore.get();
-        if (EncodedObjectStore.get()==null)
+        GlobalEncodedObjectStore.get();
+        if (GlobalEncodedObjectStore.get()==null)
             System.out.println("ObjectMapper not present");
         else
-            System.out.println("ObjectMapper classname: "+ EncodedObjectStore.get().getClass().getName());
+            System.out.println("ObjectMapper classname: "+ GlobalEncodedObjectStore.get().getClass().getName());
 
         // Create a high number of accounts bottom-up
         // This is a much faster method, as it doesn't create waste in
@@ -425,7 +439,7 @@ public class CompareTries {
 
 
     public static Trie retrieveNode(EncodedObjectRef encodedOfs) {
-        ObjectReference r = EncodedObjectStore.get().retrieve(encodedOfs);
+        ObjectReference r = GlobalEncodedObjectStore.get().retrieve(encodedOfs);
         Trie node = Trie.fromMessage(r.message, encodedOfs, r.leftRef, r.rightRef, null);
         return node;
     }
