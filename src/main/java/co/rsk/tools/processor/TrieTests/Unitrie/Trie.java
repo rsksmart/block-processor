@@ -198,14 +198,14 @@ public class Trie {
         compressIfNecessary();
     }
 
-    public void compressTree() {
+    public void compressEncodingsRecursivelly() {
         for (byte k = 0; k < ARITY; k++) {
             Trie node = this.retrieveNode(k);
 
             if (node == null) {
                 continue;
             }
-            node.compressTree();
+            node.compressEncodingsRecursivelly();
 
             getNodeReference(k).setEncodedRef(node.getEncodedRef());
         }

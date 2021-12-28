@@ -129,7 +129,7 @@ public class CompareTries {
         System.out.println(":: Remap Used Before MB: " + rstartMbs);
         ms.beginRemap();
         System.out.println(":: Remap removing spaces: "+ ms.getRemovingSpaccesDesc());
-        t.compressTree();
+        t.compressEncodingsRecursivelly();
         //t.checkTree();
         long rended = System.currentTimeMillis();
 
