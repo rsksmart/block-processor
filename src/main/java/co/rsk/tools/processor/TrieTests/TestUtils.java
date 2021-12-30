@@ -25,6 +25,12 @@ public final class TestUtils {
         return aRandom;
     }
 
+    public static void  fillRandomBytes(byte[] buf, int ofs,int length) {
+        byte[] result = new byte[length];
+        getRandom().nextBytes(result);
+        System.arraycopy(result,0,buf,ofs,length);
+    }
+
     public static byte[] randomBytes(int length) {
         byte[] result = new byte[length];
         getRandom().nextBytes(result);

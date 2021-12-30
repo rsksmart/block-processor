@@ -5,20 +5,24 @@ package co.rsk.tools.processor.TrieTests;
 import co.rsk.core.Coin;
 import co.rsk.core.types.ints.Uint24;
 import co.rsk.tools.processor.TrieTests.Unitrie.*;
+import co.rsk.tools.processor.TrieTests.ohard.HardEncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.oheap.LongEOR;
 import co.rsk.tools.processor.TrieTests.oheap.EncodedObjectHeap;
 import co.rsk.tools.processor.TrieUtils.ExpandedTrieKeySlice;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 import org.ethereum.core.AccountState;
 import org.ethereum.core.Denomination;
+import org.ethereum.util.ByteUtil;
 
 import java.math.BigInteger;
 import java.util.Arrays;
+import java.util.Iterator;
 
 public class CompareTries {
     int accountSize;
     int valueSize;
-    int keySize;
+    int fixKeySize;
+    int varKeySize;
     long max = 32L*(1<<20);// 8 Million nodes // 1_000_000;
     EncodedObjectStore ms;
     long remapTime =0;
@@ -30,6 +34,12 @@ public class CompareTries {
     long ended;
     long endMbs;
     Trie rootNode;
+    enum TestMode {
+        testERC20Balances,
+        testEOAs,
+        microTest
+    }
+    TestMode testMode = TestMode.microTest;
 
     public void prepare() {
         // in satoshis
@@ -41,17 +51,43 @@ public class CompareTries {
                         Denomination.satoshisToWeis(10_1000_1000)));
 
         accountSize = a.getEncoded().length;
+
         System.out.println("Average account size: "+accountSize);
-        // accountSize = 12
-        accountSize = 12;
+        if (testMode==TestMode.microTest) {
+            fixKeySize =1;
+            varKeySize = 1;// test
+            valueSize = 1;
+        } else
+        if (testMode==TestMode.testERC20Balances) {
+            // We assume the contract uses an optimized ERC20 balance
+            // Thereare 1 billion tokens (2^30).
+            // The minimum unit is one billion. (2^30)
+            // This is less than 2^64 (8 bytes)
 
-        // A cell address contains 10+20 account bytes, plus 10+32.
-        // + 1 domain
-        // + 1 intermediate (always fixed byte, we can skip for these tests)
-        valueSize = accountSize;
-        keySize = 10+20;//+10+32;
+            // We omit the first byte (domain separation) because it only
+            // creates a single node in the trie.
+            // Storage addresses are 20-byte in length.
+            fixKeySize =10+20+1;
 
-        System.out.println("keysize: "+keySize);
+            // Here we assume an efficient packing on storage addresses.
+            // Solidity will not efficiently pack addresses, as it will
+            // turn them 32 bytes long by hashing.
+            varKeySize = 10+20; // 10 bytes randomizer + 10 bytes address
+            valueSize = 8;
+        } else {
+            // accountSize = 12
+            accountSize = 12;
+
+            // A cell address contains 10+20 account bytes, plus 10+32.
+            // + 1 domain
+            // + 1 intermediate (always fixed byte, we can skip for these tests)
+            valueSize = accountSize;
+            varKeySize = 10 + 20;//+10+32;
+        }
+        System.out.println("varKeysize: "+ varKeySize);
+        System.out.println("fixKeysize: "+ fixKeySize);
+        System.out.println("keysize: "+(varKeySize+fixKeySize));
+
         System.out.println("valueSize: "+valueSize);
 
         ms = GlobalEncodedObjectStore.get();
@@ -161,9 +197,12 @@ public class CompareTries {
         if (rootNode ==null)
             rootNode = new Trie();
 
-        for (long i = 0; i < max; i++) {
+        byte[] fixPart = TestUtils.randomBytes(fixKeySize);
+        byte[] key = new byte[fixKeySize+varKeySize];
 
-            byte[] key = TestUtils.randomBytes(keySize);
+        for (long i = 0; i < max; i++) {
+            //byte[] key = TestUtils.randomBytes(varKeySize);
+            TestUtils.fillRandomBytes(key,fixKeySize,varKeySize);
             byte[] value = TestUtils.randomBytes(valueSize);
             rootNode = rootNode.put(key, value);
             if (i % 100000 == 0) {
@@ -227,6 +266,7 @@ public class CompareTries {
         if(n <= 0) throw new IllegalArgumentException();
         return (int) (63 - Long.numberOfLeadingZeros(n));
     }
+    public static int subTreeCount = 64;
 
     public void buildbottomUp() {
         prepare();
@@ -239,10 +279,12 @@ public class CompareTries {
             throw new RuntimeException("only for powers of 2");
 
         int intermediateBits =log2w;
-        int leafBits = keySize*8-intermediateBits;
+        int leafBits = varKeySize *8-intermediateBits;
+        if (leafBits<0)
+            throw new RuntimeException("Not enough leafts");
 
         // it will be split in 8 subtrees
-        int stCount = 64;
+        int stCount = subTreeCount;
         Trie[] nodes = new Trie[stCount];
         int subTreeBits = log2(stCount);
         long stWidthLong = width/stCount;
@@ -250,6 +292,8 @@ public class CompareTries {
             throw new RuntimeException("invalid width");
 
         int stWidth = (int) width/stCount;
+        if (stWidth==0)
+            throw new RuntimeException("Not enough leafts");
 
         System.out.println("Building subttrees...");
         start();
@@ -263,6 +307,24 @@ public class CompareTries {
         }
         System.out.println("Merging subttrees...");
         rootNode = mergeNodes(nodes);
+
+        byte[] encodedFixKey = new byte[fixKeySize*8];
+        // leave 1 bit out for the node branch
+        TrieKeySlice fixSharedPath =TrieKeySliceFactoryInstance.get().fromEncoded(encodedFixKey,0,fixKeySize*8-1);
+
+        // now build a node at the top with the fixed part.
+        // We assume here the previous rootNode had two children, so the tree
+        // is well balanced
+        if ((rootNode.getLeft().isEmpty()) || (rootNode.getRight().isEmpty())) {
+            System.out.println("The trie is not well balanced");
+        }
+
+        rootNode = new Trie(null,fixSharedPath,
+                null,
+                new NodeReference(null,rootNode,null,null),
+                NodeReference.empty(),
+                Uint24.ZERO,
+                null);
         stop();
         dumpResults();
         //countNodes(t);
@@ -362,20 +424,25 @@ public class CompareTries {
 
     }
 
-    public void smallWorldTest() {
+    static public EncodedObjectStore chooseEncodedStore() {
+
         EncodedObjectStore encodedObjectStore;
         // Here you have to choose one encoded object store.
         // uncomment a single line from the lines below:
 
         //encodedObjectStore = new SoftRefEncodedObjectStore();
-        encodedObjectStore = new EncodedObjectHeap();
+        //encodedObjectStore = new EncodedObjectHeap();
         //encodedObjectStore = new EncodedObjectHashMap();
-        //encodedObjectStore = new HardEncodedObjectStore();
+        encodedObjectStore = new HardEncodedObjectStore();
         //encodedObjectStore = new MultiSoftEncodedObjectStore();
-        smallWorldTest(encodedObjectStore);
+        return encodedObjectStore;
     }
 
-    public void smallWorldTest(EncodedObjectStore encodedObjectStore) {
+    public void smallWorldTest() {
+        smallWorldTest(chooseEncodedStore());
+    }
+
+    public void setupGlobalClasses(EncodedObjectStore encodedObjectStore) {
         GlobalEncodedObjectStore.set(encodedObjectStore);
         EncodedObjectHeap.default_spaceMegabytes = 500;
         //TrieKeySliceFactoryInstance.setTrieKeySliceFactory(CompactTrieKeySlice.getFactory());
@@ -387,6 +454,11 @@ public class CompareTries {
             System.out.println("ObjectMapper not present");
         else
             System.out.println("ObjectMapper classname: "+ GlobalEncodedObjectStore.get().getClass().getName());
+    }
+
+    public void smallWorldTest(EncodedObjectStore encodedObjectStore) {
+        testMode = TestMode.testERC20Balances;
+        setupGlobalClasses(encodedObjectStore);
 
         // Create a high number of accounts bottom-up
         // This is a much faster method, as it doesn't create waste in
@@ -407,10 +479,84 @@ public class CompareTries {
         countNodes(rootNode);
     }
 
+    public void microWorldTest(EncodedObjectStore encodedObjectStore) {
+        // Creates 4 nodes bottom up, and add 4 additional nodes
+        // top down
+        setupGlobalClasses(encodedObjectStore);
+        subTreeCount = 4;
+        max = 4;
+        buildbottomUp();
+        countNodes(rootNode);
+        dumpTrie();
+        System.out.println("---------------------------");
+
+        max = 4;
+        buildByInsertion();
+        countNodes(rootNode);
+        dumpTrie();
+        String[] expectedResult = new String[]{
+                "0000000",
+                "00000000",
+                "000000000",
+                "00000000000",
+                "0000000000000111 -> f2",
+                "0000000000011000 -> 7a",
+                "0000000001",
+                "00000000010",
+                "0000000001001101 -> 2f",
+                "0000000001011000 -> 08",
+                "0000000001101111 -> 3a",
+                "000000001",
+                "0000000010101101 -> 3e",
+                "0000000011",
+                "0000000011011011 -> 4b",
+                "0000000011110001 -> 0f"};
+
+        checkTrie(expectedResult);
+    }
+
+    public String interatorElementToStr(IterationElement e) {
+        String key = e.toString();
+        byte[] valueBin = e.getNode().getValue();
+        String value;
+        if (valueBin!=null)
+            value = " -> "+ByteUtil.toHexString(valueBin);
+        else
+            value = "";
+        return(key+value);
+    }
+
+    public void checkTrie(String[] expectedResult) {
+        Iterator<IterationElement> iterator = rootNode.getPreOrderIterator();
+        int i =0;
+        while (iterator.hasNext()) {
+            IterationElement e = iterator.next();
+            String keyValue = interatorElementToStr(e);
+            if (!keyValue.equals(expectedResult[i])) {
+                throw new RuntimeException("invalid entry "+i);
+            }
+            i++;
+        }
+        if (i!=expectedResult.length)
+            throw new RuntimeException("invalid length "+i);
+        System.out.println("Trie checked ok");
+
+    }
+
+    public void dumpTrie() {
+        Iterator<IterationElement> iterator =rootNode.getPreOrderIterator();
+        while (iterator.hasNext()) {
+            IterationElement e =iterator.next();
+            String keyValue = interatorElementToStr(e);
+            System.out.println(keyValue);
+        }
+    }
+
     public static void main (String args[]) {
         //testInMemStore();
         CompareTries c = new CompareTries();
         c.smallWorldTest();
+        //c.microWorldTest(chooseEncodedStore());
         System.exit(0);
     }
 

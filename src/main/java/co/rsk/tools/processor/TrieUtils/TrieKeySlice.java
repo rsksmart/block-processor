@@ -5,6 +5,8 @@ public interface TrieKeySlice {
     public TrieKeySlice clone();
     public byte get(int i);
     public byte[] encode();
+    public byte[] expand(); // into ones and zeros
+
     public TrieKeySlice slice(int from, int to);
     public TrieKeySlice commonPath(TrieKeySlice other);
     public TrieKeySlice appendBit(byte implicitByte);

@@ -29,6 +29,10 @@ public class ExpandedTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
         return expandedKey[offset + i];
     }
 
+    public byte[] expand() {
+        return Arrays.copyOfRange(expandedKey, offset, limit);
+    }
+
     public byte[] encode() {
         // TODO(mc) avoid copying by passing the indices to PathEncoder.encode
         return PathEncoder.encode(Arrays.copyOfRange(expandedKey, offset, limit));

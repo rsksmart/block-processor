@@ -21,7 +21,7 @@ public class IterationElement {
         }
 
         public String toString() {
-            byte[] encodedFullKey = nodeKey.encode();
+            byte[] encodedFullKey = nodeKey.expand();
             StringBuilder ouput = new StringBuilder();
             for (byte b : encodedFullKey) {
                 ouput.append( b == 0 ? '0': '1');

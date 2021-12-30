@@ -40,6 +40,10 @@ public class CompactTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
             return 0;
     }
 
+    public byte[] expand() {
+        return PathEncoder.decode(compactKey,offset,length());
+    }
+
     public byte[] encode() {
         // TODO(mc) avoid copying by passing the indices to PathEncoder.encode
         return PathEncoder.recode(compactKey, offset, length(),length());
