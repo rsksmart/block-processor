@@ -161,6 +161,11 @@ public class CompactTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
         return new CompactTrieKeySlice(paddedcompactKey, 0, newLength);
     }
 
+    public TrieKeySlice fromDecoded(byte[] decodedKey, int bitoffset, int bitLength) {
+        byte[] compactKey = PathEncoder.encode(decodedKey,bitoffset,bitLength);
+        return new CompactTrieKeySlice(compactKey, 0, bitLength);
+    }
+
     public TrieKeySlice fromKey(byte[] key) {
         byte[] compactKey = PathEncoder.cloneEncoding(key);
         return new CompactTrieKeySlice(compactKey, 0, compactKey.length*8);

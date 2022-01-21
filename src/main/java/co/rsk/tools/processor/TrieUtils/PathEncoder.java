@@ -17,6 +17,21 @@ public class PathEncoder {
         return encodeBinaryPath(path,0,path.length);
     }
 
+    public static byte[] encode(byte[] path,int bitOffset,int bitLength) {
+        if (path == null) {
+            throw new IllegalArgumentException("path");
+        }
+        byte[] encoded = new byte[calculateEncodedLength(bitLength)];
+        for (int i=0;i<bitLength;i++) {
+            if (path[i]==1) {
+                int nbyte = (i + bitOffset) >> 3;
+                int mask = (0x80 >> ((i + bitOffset) & 0x7));
+                encoded[nbyte] |= mask;
+            }
+        }
+        return encoded;
+    }
+
     public static byte[] decode(byte[] encoded, int bitLength) {
         return decode(encoded,0,bitLength);
     }
@@ -38,6 +53,7 @@ public class PathEncoder {
     }
 
     // First bit is MOST SIGNIFICANT
+    // Not very nicely coded. Look at encode(,,) for a clearer aproach.
     private static byte[] encodeBinaryPath(byte[] path,int soffset,int length) {
         int lpath = path.length;
         int lencoded = calculateEncodedLength(lpath);

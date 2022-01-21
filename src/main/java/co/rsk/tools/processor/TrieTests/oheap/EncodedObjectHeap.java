@@ -6,7 +6,9 @@ import co.rsk.tools.processor.TrieTests.Unitrie.ObjectReference;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.List;
 
 
 public class EncodedObjectHeap extends EncodedObjectStore {
@@ -552,6 +554,19 @@ public class EncodedObjectHeap extends EncodedObjectStore {
         return (EncodedObjectRef) new LongEOR(add(encoded,aLeftOfs,aRightOfs));
     }
 
+    public List<String> getStats() {
+        List<String> res = new ArrayList<>(20);
+        res.add("usage[%]: " + getUsagePercent());
+        res.add("usage[Mb]: " + getMemUsed() / 1000 / 1000);
+        res.add("alloc[Mb]: " + getMemAllocated() / 1000 / 1000);
+        res.add("max[Mb]: " + getMemMax() / 1000 / 1000);
+        res.add("Empty   spaces: " + getEmptySpacesCount() + " (" + getEmptySpacesDesc() + ")");
+        res.add("Filled  spaces: " + getFilledSpacesCount() + " (" + getFilledSpacesDesc() + ")");
+        res.add("cur space    : " + getCurSpaceNum());
+        res.add("cur space usage[%]: " + getCurSpace().getUsagePercent());
+        return res;
+    }
+
     public void verifyEOR(EncodedObjectRef ref) {
         if (ref==null) return;
         long ofs =((LongEOR) ref).ofs;
@@ -704,7 +719,11 @@ public class EncodedObjectHeap extends EncodedObjectStore {
     public int getFilledSpacesCount() {
         return headOfFilledSpaces.count;
     }
-    public String getRemovingSpaccesDesc() {
+
+    public String getGarbageCollectionDescription() {
+        return getRemovingSpacesDesc();
+    }
+    public String getRemovingSpacesDesc() {
         String s="";
         for(int i=0;i<maxSpaces;i++) {
             if (oldSpacesBitmap.get(i))

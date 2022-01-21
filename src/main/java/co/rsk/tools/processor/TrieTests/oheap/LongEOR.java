@@ -7,4 +7,8 @@ public class LongEOR extends EncodedObjectRef {
     public LongEOR(long aOfs) {
         ofs = aOfs;
     }
+
+    public String toString() {
+        return "ofs: "+ofs;
+    }
 }

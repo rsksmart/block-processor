@@ -11,7 +11,7 @@ public class HeapFileDesc {
     public int currentSpace;
     public long rootOfs;
 
-    void saveToFile(String fileName) {
+    public void saveToFile(String fileName) {
         try {
             //out = new BufferedOutputStream(new FileOutputStream(fileName));
             FileOutputStream out = new FileOutputStream(fileName);
@@ -38,7 +38,7 @@ public class HeapFileDesc {
         }
 
     }
-    static HeapFileDesc loadFromFile(String fileName) {
+    public static HeapFileDesc loadFromFile(String fileName) {
         HeapFileDesc d = new HeapFileDesc();
         InputStream in;
         try {

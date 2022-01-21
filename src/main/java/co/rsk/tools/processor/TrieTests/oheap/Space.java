@@ -18,6 +18,7 @@ public class Space {
     public boolean inUse = false;
     public int previousSpaceNum = -1; // unlinked
 
+
     public void create(int size) {
         if (mem == null)
             mem = new byte[size];

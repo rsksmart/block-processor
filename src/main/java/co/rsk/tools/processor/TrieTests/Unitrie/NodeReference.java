@@ -87,21 +87,16 @@ public class NodeReference {
         if (encodedRef ==null) return null;
         ObjectReference r  = GlobalEncodedObjectStore.get().retrieve(encodedRef);
         try {
-            //if (encodedOfs==161722718)
-            //    encodedOfs=encodedOfs;
             Trie node = Trie.fromMessage(r.message, encodedRef, r.leftRef, r.rightRef, store);
             return node;
         } catch (java.nio.BufferUnderflowException e) {
             //encodeOfs: 3386664381
             //encodeOfs: 2
-            /*
-            System.out.println("encodeOfs: "+encodedOfs);
-            int s = ObjectHeap.get().getSpaceNumOfPointer(encodedOfs);
-            System.out.println("space: "+ s);
-            System.out.println("internalOfs: "+ObjectHeap.get().getSpaceOfsFromPointer(s,encodedOfs));
-            System.out.println("messageLen: "+r.message.array().length);
-            r  = ObjectHeap.get().retrieve(encodedOfs);
-            */
+            System.out.println("fault");
+            System.out.println("EOR: "+encodedRef.toString());
+            String ri = GlobalEncodedObjectStore.get().getRefInfo(encodedRef);
+            System.out.println(ri);
+
             throw e;
         }
 
@@ -123,7 +118,10 @@ public class NodeReference {
         if (lazyNode != null) {
             return Optional.of(lazyNode);
         }
-        if ((encodedRef !=null) || (GlobalEncodedObjectStore.get().accessByHash() && (lazyHash !=null))) {
+        if ((encodedRef !=null) ||
+                ((GlobalEncodedObjectStore.get()!=null) &&
+                        (GlobalEncodedObjectStore.get().accessByHash()) &&
+                        (lazyHash !=null))) {
             if (persistent) {
                 lazyNode = getDynamicLazyNode();
                 return Optional.of(lazyNode);

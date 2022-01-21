@@ -14,7 +14,7 @@ public interface TrieKeySliceFactory {
     //public TrieKeySlice fromEncoded(byte[] src, int byteOffset, int keyLength, int encodedLength);
 
     public TrieKeySlice fromEncoded(byte[] encodedKey, int bitoffset, int bitLength);
-
+    public TrieKeySlice fromDecoded(byte[] decodedKey, int bitoffset, int bitLength);
 
         public TrieKeySlice empty();
 

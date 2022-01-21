@@ -17,6 +17,13 @@ public class ExpandedTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
         this.limit = limit;
     }
 
+    public TrieKeySlice fromDecoded(byte[] decodedKey, int bitoffset, int bitLength) {
+        // create with reference
+        TrieKeySlice ret = new ExpandedTrieKeySlice(decodedKey,bitoffset,bitoffset+bitLength);
+        // clone to make it unique
+        return ret.clone();
+    }
+
     public TrieKeySlice clone() {
         return new ExpandedTrieKeySlice(Arrays.copyOfRange(expandedKey, offset, limit),0,length());
     }
@@ -144,5 +151,29 @@ public class ExpandedTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
 
     public static TrieKeySliceFactory getFactory() {
         return emptyTrie;
+    }
+
+    public String toString() {
+        String s ="";
+        for (int i = 0; i < length(); i++) {
+            if (get(i)==1) {
+                s += "1";
+            }   else {
+                s += "0";
+            }
+        }
+        return s;
+    }
+
+    public ExpandedTrieKeySlice revert() {
+        int len =length();
+        byte[] newKey = new byte[len];
+
+        for (int i = 0; i < length(); i++) {
+            newKey[len-i-1] = expandedKey[offset + i];
+        }
+        ExpandedTrieKeySlice result = new ExpandedTrieKeySlice(
+                newKey ,0,len);
+        return result;
     }
 }
