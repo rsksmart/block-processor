@@ -4,7 +4,11 @@ package co.rsk.tools.processor.TrieTests;
 
 import co.rsk.core.Coin;
 import co.rsk.core.types.ints.Uint24;
+import co.rsk.crypto.Keccak256;
 import co.rsk.tools.processor.TrieTests.Unitrie.*;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.CAHashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.DataSourceWithCACache;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.TrieStoreImpl;
 import co.rsk.tools.processor.TrieTests.ohard.HardEncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.oheap.LongEOR;
 import co.rsk.tools.processor.TrieTests.oheap.EncodedObjectHeap;
@@ -14,17 +18,39 @@ import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
 import org.ethereum.core.AccountState;
 import org.ethereum.core.Denomination;
+import org.ethereum.crypto.Keccak256Helper;
+import org.ethereum.datasource.DataSourceWithCache;
+import org.ethereum.datasource.KeyValueDataSource;
+import org.ethereum.datasource.LevelDbDataSource;
+import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
+import org.ethereum.util.FastByteComparisons;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.Path;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.function.Function;
 
 public class CompareTries {
+    final int flushNumberOfBlocks =1000;
+    // Each write to store takes 20K gas, which means that each block with 6.8M gas
+    // can perform 340 writes.
+    //
+    final int writesPerBlock = 340;
+
+    // 6.8M / 200 = 34K
+    // Cost of read is 200 right now in RSK.
+    final int readsPerBlock = 34000;
+
+
     int accountSize;
     int valueSize;
     int fixKeySize;
@@ -53,6 +79,7 @@ public class CompareTries {
     long timeToInsertElements;
     long timeToBuildTree;
     long leafNodeCounter;
+    long blocksCreated;
 
     String logName;
 
@@ -64,6 +91,70 @@ public class CompareTries {
         microTest
     }
     TestMode testMode = TestMode.microTest;
+
+    void deleteDirectoryRecursion(Path path) throws IOException {
+        if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS)) {
+            try (DirectoryStream<Path> entries = Files.newDirectoryStream(path)) {
+                for (Path entry : entries) {
+                    deleteDirectoryRecursion(entry);
+                }
+            }
+        }
+        Files.delete(path);
+    }
+    private long getFolderSize(File folder) {
+        long length = 0;
+        File[] files = folder.listFiles();
+        if (files==null)
+            return 0;
+
+        int count = files.length;
+
+        for (int i = 0; i < count; i++) {
+            if (files[i].isFile()) {
+                length += files[i].length();
+            }
+            else {
+                length += getFolderSize(files[i]);
+            }
+        }
+        return length;
+    }
+
+    public void dumpTrieDBFolderSize() {
+       log("TrieDB size: "+getFolderSize(new File(trieDBFolder.toString()))) ;
+    }
+    final boolean useCACache = true;
+
+    // This emulares rskj store building
+    protected TrieStore buildTrieStore(Path trieStorePath) {
+        int statesCacheSize;
+
+        if (ms!=null)
+            // We really don't need this cache. We could just remove it.
+            // We give it a minimum size
+            statesCacheSize = 10_000;
+        else
+            statesCacheSize = 1_000_000;
+        try {
+            log("deleting previous trie db");
+            deleteDirectoryRecursion(trieStorePath.getParent());
+            dumpTrieDBFolderSize();
+        } catch (IOException e) {
+            System.out.println("Could not delete database dir");
+        }
+        KeyValueDataSource ds = LevelDbDataSource.makeDataSource(trieStorePath);
+
+        // in rskj flushNumberOfBlocks is 1000, so we should flush automatically every 1000
+        // blocks
+        if (useCACache)
+            ds = new DataSourceWithCACache(ds, statesCacheSize, null);
+        else
+           ds = new DataSourceWithCache(ds, statesCacheSize, null);
+
+
+        return (TrieStore) new TrieStoreImpl(ds);
+    }
 
     public void prepare() {
         // in satoshis
@@ -134,6 +225,10 @@ public class CompareTries {
 
 
     public void start() {
+        //System.gc();
+        log("-- Java Total Memory [MB]: " +  Runtime.getRuntime().totalMemory() / 1024/ 1024);
+        log("-- Java Free Memory [MB]: " +  Runtime.getRuntime().freeMemory() / 1024/ 1024);
+        log("-- Java Max Memory [MB]: " +  Runtime.getRuntime().maxMemory()/ 1024/ 1024);
         startMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
 
         log("Used Before MB: " + startMbs);
@@ -159,6 +254,7 @@ public class CompareTries {
     }
 
     public void printMemStats(String s) {
+        if (ms==null) return;
             List<String> stats= ms.getStats();
             for(int i=0;i<stats.size();i++) {
                 log(s + " InMemStore " + stats.get(i));
@@ -182,6 +278,19 @@ public class CompareTries {
             if (ms.supportsGarbageCollection())
                 log("-- Store percentage use: " + ms.getUsagePercent()+"%");
         }
+    }
+    public void dumpMemProgress(long i,long amax) {
+        log("item " + i + " (" + (i * 100 / amax) + "%)");
+
+        long ended = System.currentTimeMillis();
+        elapsedTime = (ended - started) / 1000;
+        log("-- Partial Elapsed time [s]: " + elapsedTime);
+        if (elapsedTime>0)
+            log("-- Added nodes/sec: "+(i/elapsedTime)); // 18K
+        endMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
+        log("-- Jave Mem Used[MB]: " + endMbs);
+        log("-- Jave Mem Comsumed [MB]: " + (endMbs - startMbs));
+
     }
 
     public void garbageCollection(Trie t) {
@@ -278,13 +387,22 @@ public class CompareTries {
         long x =TestUtils.getPseudoRandom().nextLong(allKeys);
         return getExistentKey(x);
     }
+    TrieStore trieStore;
 
-    public void createOrAppendToRootNode() {
+    public TrieStore getTrieStore() {
+        if (trieStore==null)
+            trieStore = buildTrieStore(trieDBFolder);
+        return trieStore;
+    }
+    Path trieDBFolder =Path.of("./triestore/state");
+
+        public void createOrAppendToRootNode() {
         if (rootNode ==null) {
-            rootNode = new Trie();
+            rootNode = new Trie(getTrieStore());
             leafNodeCounter =0;
         }
     }
+
     public void buildByInsertion() {
         maxKeysTopDown = max;
         prepare();
@@ -306,25 +424,71 @@ public class CompareTries {
             pseudoRandom.fillRandomBytes(key,fixKeySize,varKeySize);
             byte[] value = TestUtils.getPseudoRandom().randomBytes(valueSize);
             rootNode = rootNode.put(key, value);
-            if (i % 1000==0) {
-                // Every 1000 writes, add one to the global clock, so elements inserted
-                // get tagged with newer times
-                GlobalClock.setTimestamp(GlobalClock.getTimestamp()+1);
+            if (i % writesPerBlock==0) {
+                simulateNewBlock(true);
+
             }
             if (i % 100000 == 0) {
                 dumpProgress(i,max);
+                logTraceInfo();
             }
             if (shouldRunGC()) {
                 garbageCollection(rootNode);
             }
         }
+        simulateNewBlock(true);
+        flushTrie();
+
         stop();
         dumpResults();
+        dumpTrieDBFolderSize();
         timeToInsertElements = elapsedTime;
         //countNodes(rootNode);
     }
+    public void flushTrie() {
+        getTrieStore().flush();
+    }
+
+    public void saveTrie() {
+        getTrieStore().save(rootNode);
+    }
+
+    public void simulateNewBlock(boolean sSaveTrie) {
+        // Every N writes, add one to the global clock, so elements inserted
+        // get tagged with newer times
+        GlobalClock.setTimestamp(GlobalClock.getTimestamp() + 1);
+        if (GlobalEncodedObjectStore.get() == null) {
+            // If there is no encoded object store, we emulate
+            // that a following block must be mined. So we must dispose the current trie
+            // and reload it from disk or any other TrieStore cache that exists.
+            Keccak256 rootNodeHash = rootNode.getHash();
+            if (sSaveTrie)
+                saveTrie();
+            rootNode = null; // make sure nothing is left
+            Optional<Trie> optRootNode = getTrieStore().retrieve(rootNodeHash.getBytes());
+            if (!optRootNode.isPresent()) {
+                System.out.println("Could not retrieve node ");
+                System.exit(1);
+            }
+            rootNode = optRootNode.get();
+        } else {
+            // If we have an encoded object store, we never throw away the root
+            // but we still have to flush things to disk
+            //El problema es que el encoded store no guarda un flag indicando si el nodo esta
+            //        en disco o no. Eso hace que siempre se regrabe
+
+            if (sSaveTrie)
+                saveTrie();
+        }
+        blocksCreated++;
+        if (blocksCreated % flushNumberOfBlocks==0)
+            flushTrie();
+    }
 
    public boolean shouldRunGC() {
+        if (ms==null)
+            return false;
+
        return ms.heapIsAlmostFull();
    }
 
@@ -343,8 +507,12 @@ public class CompareTries {
 
         elapsedTime = (ended - started) / 1000;
         log("Elapsed time [s]: " + elapsedTime);
-        if (elapsedTime!=0)
+        if (elapsedTime!=0) {
             log("Added nodes/sec: " + (max / elapsedTime));
+            log("Added blocks/sec: " + (blocksCreated / elapsedTime));
+            if (blocksCreated>0)
+                log("Avg processing time/block [msec]: " +  (ended - started)/blocksCreated);
+        }
 
         log("Memory used after test: MB: " + endMbs);
         log("Consumed MBs: " + (endMbs - startMbs));
@@ -353,11 +521,30 @@ public class CompareTries {
 
     }
 
+    public void dumpMemResults(int max) {
+
+        elapsedTime = (ended - started) / 1000;
+        log("Elapsed time [s]: " + elapsedTime);
+        if (elapsedTime!=0) {
+            log("Added nodes/sec: " + (max / elapsedTime));
+        }
+
+        log("Memory used after test: MB: " + endMbs);
+        log("Consumed MBs: " + (endMbs - startMbs));
+
+    }
+
     public void existentReadNodes(Trie t) {
+
+
+
         byte[][] keys = null;
         boolean preloadKeys = false;
         boolean sequentialKeys = false;
         long sequentialBase = maxKeysBottomUp;
+        boolean x = false;
+        if (x)
+            return;
         if (preloadKeys) {
             keys = new byte[(int) (maxKeysTopDown + maxKeysBottomUp)][];
             for (int i = 0; i < keys.length; i++) {
@@ -375,6 +562,9 @@ public class CompareTries {
         boolean debugQueries = false;
         int totalKeys =(int) (maxKeysTopDown + maxKeysBottomUp);
         for(int i=0;i<maxReads;i++) {
+            if (i % readsPerBlock==0) {
+                simulateNewBlock(false);
+            }
             if (i % 50000==0)
                 System.out.println("iteration: "+i);
             byte[] key;
@@ -419,6 +609,9 @@ public class CompareTries {
         long maxReads = 10_000_000;
         int found=0;
         for(int i=0;i<maxReads;i++) {
+            if (i % readsPerBlock==0) {
+                simulateNewBlock(false);
+            }
             byte[] key = TestUtils.getPseudoRandom().randomBytes(varKeySize);
             if (t.find(key)!=null)
                 found++;
@@ -538,7 +731,7 @@ public class CompareTries {
                 log("The trie is not well balanced");
             }
 
-            rootNode = new Trie(null, fixSharedPath,
+            rootNode = new Trie(getTrieStore(), fixSharedPath,
                     null,
                     new NodeReference(null, rootNode, null, null),
                     NodeReference.empty(),
@@ -550,6 +743,16 @@ public class CompareTries {
         stop();
         dumpResults();
         timeToBuildTree = elapsedTime;
+
+        // This flush operation will compute all hashes for millions of nodes
+        // It can take minutes
+        log("Start saving (all nodes hashes computed)...");
+        saveTrie();
+        log("stop saving");
+        log("Start flushing..");
+        flushTrie();
+        log("stop flushing");
+
         //countNodes(t);
         existentReadNodes(rootNode);
     }
@@ -640,9 +843,139 @@ public class CompareTries {
     }
     FileWriter myWriter;
 
+    public void test() {
+        Object x;
+        byte[] vec = new byte[10];
+        x = vec;
+        if (x instanceof byte[]) {
+            System.out.println("works");
+        }
+    }
+    class ComputeKeccakKey implements Function<byte[],ByteArrayWrapper> {
+
+        public ByteArrayWrapper apply(byte[]  data) {
+            return new ByteArrayWrapper(Keccak256Helper.keccak256(data));
+        }
+    }
+
+    class ComputeHashFromKeccakKey implements CAHashMap.getHashcode<ByteArrayWrapper> {
+        public  int intFromBytes(byte b1, byte b2, byte b3, byte b4) {
+            return b1 << 24 | (b2 & 0xFF) << 16 | (b3 & 0xFF) << 8 | (b4 & 0xFF);
+        }
+        public int hashCodeFromHashDigest(byte[] bytes) {
+            // Use the last 4 bytes, not the first 4 which are often zeros in Bitcoin.
+            return intFromBytes(bytes[28], bytes[29], bytes[30], bytes[31]);
+        }
+        public int getHashcode(ByteArrayWrapper  data) {
+            return hashCodeFromHashDigest(data.getData());
+        }
+    }
+
+    public void testCACacheMem() {
+        ComputeKeccakKey  computeKey = new ComputeKeccakKey();
+        ComputeHashFromKeccakKey computeHashFromKeccakKey = new ComputeHashFromKeccakKey();
+        float loadFActor = 0.3f;
+        boolean testCAHashMap = false;
+        boolean testLinkedHashMap = true;
+        CAHashMap<ByteArrayWrapper, byte[]> camap =null;
+        AbstractMap<ByteArrayWrapper, byte[]> map=null;
+
+        int vmax = 10_000_000;
+        int initialSize = (int) (vmax/loadFActor);
+        String testClass ="";
+        start();
+        if (testCAHashMap) {
+            camap = new CAHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor, computeKey, computeHashFromKeccakKey);
+            map = camap;
+        } else
+        if (testLinkedHashMap) {
+            map =  new LinkedHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor);
+        } else {
+            map =  new HashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor);
+        }
+        testClass = map.getClass().getName();
+
+        for (int i=0;i<vmax;i++) {
+            byte[] v1 = new byte[50];
+            v1[0]= (byte) (i & 0xff);
+            v1[1] =(byte)((i>>8)& 0xff);
+            v1[2] =(byte)((i>>16)& 0xff);
+            v1[3] =(byte)((i>>24)& 0xff);
+
+
+            if (testCAHashMap)
+                camap.put(v1);
+            else {
+                ByteArrayWrapper k1 = computeKey.apply(v1);
+                map.put(k1, v1);
+            }
+            if (i % 100_0000==0) {
+                dumpMemProgress(i,vmax);
+            }
+        }
+        stop();
+        dumpMemResults(vmax);
+        System.out.println("Class: "+testClass);
+        if (testCAHashMap) {
+
+            System.out.println("hashMapCount: " + camap.hashMapCount);
+            System.out.println("camap.size : " + camap.size());
+        } else {
+            System.out.println("HashMap test");
+            System.out.println("map.size : " + map.size());
+        }
+    }
+    public void testCACache() {
+        ComputeKeccakKey  computeKey = new ComputeKeccakKey();
+        ComputeHashFromKeccakKey computeHashFromKeccakKey = new ComputeHashFromKeccakKey();
+        CAHashMap<ByteArrayWrapper, byte[]> map =
+                new CAHashMap<ByteArrayWrapper, byte[]>(10,0.3f,computeKey,computeHashFromKeccakKey);
+        int max = 10000;
+        ByteArrayWrapper[] k = new ByteArrayWrapper[max];
+        byte[][] v = new byte[max][];
+        for (int i=0;i<max;i++) {
+            byte[] v1 = new byte[]{ (byte) (i & 0xff), (byte)((i>>8)& 0xff), (byte)((i>>16)& 0xff)};
+            ByteArrayWrapper k1 = computeKey.apply(v1);
+            k[i] = k1;
+            v[i] = v1;
+            map.put(v1);
+        }
+
+        System.out.println("hashMapCount: "+map.hashMapCount);
+        System.out.println("map.size : "+map.size());
+
+        for (int i=0;i<max;i++) {
+            checkEqual(map.get(k[i]), v[i]);
+        }
+        for (int i=0;i<max/2;i++) {
+            map.remove(k[i]);
+        }
+        for (int i=0;i<max/2;i++) {
+            checkEqual(map.get(k[i]), null);
+        }
+        byte[] x = map.get(k[max/2]);
+
+        for (int i=max/2;i<max;i++) {
+            checkEqual(map.get(k[i]), v[i]);
+        }
+        System.out.println("checked "+max);
+    }
+
+    public void checkEqual(byte[] a, byte[] b) {
+        if ((a==null) && (b==null))
+            return;
+        if ((a!=null) && (b!=null)) {
+            if (FastByteComparisons.compareTo(
+                    a, 0, a.length,
+                    b, 0, b.length) != 0)
+                throw new RuntimeException("mismatch");
+        } else
+            throw new RuntimeException("mismatch2");
+    }
+
     public void createLogFile(String basename,String expectedItems) {
         try {
-            String name = basename;
+            String name = "Results/"+basename;
             name=name+"-"+TrieKeySliceFactoryInstance.get().getClass().getSimpleName();
             String om;
             if (GlobalEncodedObjectStore.get()==null)
@@ -652,6 +985,7 @@ public class CompareTries {
             name = name + "-"+om;
             name = name + "-"+expectedItems;
             name = name + "-" + testMode.toString();
+            name = name +"-Max_"+ getMillions( Runtime.getRuntime().maxMemory());
             Date date = Calendar.getInstance().getTime();
             DateFormat dateFormat = new SimpleDateFormat("yyyy-mm-dd hh.mm.ss");
             String strDate = dateFormat.format(date);
@@ -672,6 +1006,7 @@ public class CompareTries {
             e.printStackTrace();
         }
     }
+
     public void closeLog() {
 
         try {
@@ -684,8 +1019,15 @@ public class CompareTries {
 
     }
 
+    long startMillis = System.currentTimeMillis();
+
     public void log(String s) {
-        System.out.println(s);
+        long stime = System.currentTimeMillis()-startMillis;
+        long sec = stime /1000;
+        long mil = stime % 1000;
+        String strDate =""+sec+"."+mil+": ";
+
+        System.out.println(strDate+": "+s);
         if (myWriter==null) return;
 
         try {
@@ -714,16 +1056,19 @@ public class CompareTries {
     }
 
     static public Class<? extends EncodedObjectStore> chooseEncodedStoreClass() {
+        return null; // Do not use a encoded store
         //encodedObjectStore = new SoftRefEncodedObjectStore();
         //encodedObjectStore = new EncodedObjectHeap();
         //encodedObjectStore = new EncodedObjectHashMap();
-        return HardEncodedObjectStore.class;
+        // return HardEncodedObjectStore.class;
         //encodedObjectStore = new MultiSoftEncodedObjectStore();
         //encodedObjectStore = new EncodedObjectRefHeap();
 
         //return EncodedObjectRefHeap.class;
     }
     static public EncodedObjectStore getEncodedStore(Class<? extends EncodedObjectStore> aClass) {
+        if (aClass==null)
+            return null; // do not use
         EncodedObjectStore encodedObjectStore = null;
         // Here you have to choose one encoded object store.
         // uncomment a single line from the lines below:
@@ -753,7 +1098,9 @@ public class CompareTries {
         //EncodedObjectHeap.default_spaceMegabytes = 500;
         //TrieKeySliceFactoryInstance.setTrieKeySliceFactory(CompactTrieKeySlice.getFactory());
         TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
+    }
 
+    public void logGlobalClasses() {
         log("TrieKeySliceFactory classname: "+TrieKeySliceFactoryInstance.get().getClass().getName());
         GlobalEncodedObjectStore.get();
         if (GlobalEncodedObjectStore.get()==null)
@@ -773,7 +1120,7 @@ public class CompareTries {
         //testMode = TestMode.testERC20Balances;
         //testMode = TestMode.testERC20LongBalances;
         testMode = TestMode.testEOAs;
-        long addMaxKeysBottomUp  = 1L * (1 << 20);
+        long addMaxKeysBottomUp  = 4L * (1 << 20);
         long addMaxKeysTopDown = 1L * (1 << 20);
         boolean testExistentKeys = false;
 
@@ -788,12 +1135,19 @@ public class CompareTries {
         int memoryForStoreMegabytes = 2000; // 2 GB
         String maxStr = ""+ getMillions(addMaxKeysBottomUp )+" plus "+getMillions(addMaxKeysTopDown);
 
-        createLogFile("swtest",maxStr);
-
         EncodedObjectStore encodedObjectStore =getEncodedStore(aClass);
+        // I setup the global encoded object store here so that the log filename
+        // takes the store class name to build the log file name
         setupGlobalClasses(encodedObjectStore);
-        encodedObjectStore.setMaxMemory(memoryForStoreMegabytes*1000L*1000L);
-        encodedObjectStore.initialize();
+        if (encodedObjectStore!=null) {
+            encodedObjectStore.setMaxMemory(memoryForStoreMegabytes * 1000L * 1000L);
+            encodedObjectStore.initialize();
+        }
+        createLogFile("swtest",maxStr);
+        logGlobalClasses();
+
+
+
 
         if (addMaxKeysBottomUp >0) {
             // Create a high number of accounts bottom-up
@@ -812,15 +1166,31 @@ public class CompareTries {
         // now add another 8M items to it!
         max = addMaxKeysTopDown;
         buildByInsertion();
+        logTraceInfo();
+        logBlocksCreated();
         countNodes(rootNode);
 
         existentReadNodes(rootNode);
         randomReadNodes(rootNode);
-
+        logTraceInfo();
         dumpResultsInCSV();
         closeLog();
     }
 
+    public void logBlocksCreated() {
+        log("blocks created: "+blocksCreated);
+        log("writesPerBlock: "+writesPerBlock);
+        log("readsPerBlock: "+readsPerBlock);
+
+    }
+    public void logTraceInfo() {
+        String s = "::";
+        List<String> stats = ((TrieStoreImpl) getTrieStore()).getTraceInfoReport();
+        for(int i=0;i<stats.size();i++) {
+            log(s + " TrieStore " + stats.get(i));
+        }
+
+    }
     public void dumpResultsInCSV() {
         log("name,rootNodeHash,leafNodeCount,maxKeysBottomUp,maxKeysTopDown,endMbs,"+
                 "randomExistentReadsPerSecond,"+
@@ -870,6 +1240,7 @@ public class CompareTries {
         String maxStr = ""+ getMillions(max);
 
         createLogFile("tdtest",maxStr);
+        logGlobalClasses();
 
 
         // Create 9M accounts by inserting
@@ -894,6 +1265,7 @@ public class CompareTries {
         // Creates 4 nodes bottom up, and add 4 additional nodes
         // top down
         setupGlobalClasses(encodedObjectStore);
+        logGlobalClasses();
         encodedObjectStore.initialize();
         subTreeCount = 4;
         max = 4;
@@ -999,6 +1371,7 @@ public class CompareTries {
     public static void main (String args[]) {
         //testInMemStore();
         CompareTries c = new CompareTries();
+        //c.testCACacheMem();
         //c.topdownTest();
         //c.buildbottomUp();
         c.smallWorldTest();

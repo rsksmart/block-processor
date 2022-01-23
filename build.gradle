@@ -15,7 +15,8 @@ repositories {
 }
 
 ext {
-    rskjVersion = '2.2.0-PAPYRUS'
+ //   rskjVersion = '2.2.0-PAPYRUS'
+    rskjVersion = '3.2.0-IRIS'
 }
 
 dependencies {

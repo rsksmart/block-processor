@@ -17,13 +17,15 @@ public class HardObjectRef extends EncodedObjectRef {
     // Finally, the timestamp in storage rent will be compressed, and here we can't. This is only a minor difference
     // in sizes.
     int timeStamp;
+    boolean saved;
     EncodedObjectRef leftRef;
     EncodedObjectRef rightRef;
 
-    public HardObjectRef(byte[] encoded, EncodedObjectRef leftOfs, EncodedObjectRef rightOfs) {
+    public HardObjectRef(byte[] encoded, EncodedObjectRef leftOfs, EncodedObjectRef rightOfs,boolean saved) {
         this.encoded = encoded;
         this.leftRef = leftOfs;
         this.rightRef = rightOfs;
         this.timeStamp = GlobalClock.getTimestamp();
+        this.saved = saved;
     }
 }

@@ -143,6 +143,13 @@ public class Trie {
 
 
 
+    private void changeSaved() {
+        EncodedObjectStore om = GlobalEncodedObjectStore.get();
+        if (this.encoded==null) return;
+        if (om==null) return;
+        om.setSaved(this.encodedRef,this.saved);
+
+    }
     private void storeNodeInMem() {
         if (GlobalEncodedObjectStore.get().isRemapping())
             throw new RuntimeException("Should never encode nodes during remapping");
@@ -151,11 +158,11 @@ public class Trie {
         internalToMessage();
         EncodedObjectStore om = GlobalEncodedObjectStore.get();
         if (om.accessByHash()) {
-            this.encodedRef = om.add(encoded,getHash());
+            this.encodedRef = om.add(encoded,getHash(),this.saved);
         } else
          this.encodedRef = om.add(encoded,
                 left.getEncodedRef(),
-                right.getEncodedRef());
+                right.getEncodedRef(),this.saved);
         /*
         if (encodedOfs==47958557) {
             System.out.println("First position 1");
@@ -1406,6 +1413,7 @@ public class Trie {
 
     public Trie markAsSaved() {
         this.saved = true;
+        changeSaved();
         return this;
     }
 

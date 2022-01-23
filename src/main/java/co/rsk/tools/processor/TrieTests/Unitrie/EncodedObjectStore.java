@@ -30,18 +30,22 @@ public class EncodedObjectStore {
         return null;
     }
 
+    public void setSaved(EncodedObjectRef encodedRef,boolean saved) {
+
+    }
+
     public EncodedObjectRef remap(EncodedObjectRef aofs,EncodedObjectRef aleftRef,EncodedObjectRef arightRef) {
       return aofs;
     }
 
 
-    public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftRef, EncodedObjectRef rightRef) {
+    public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftRef, EncodedObjectRef rightRef,boolean saved) {
         if (accessByHash())
             throw new RuntimeException("invalid access");
         return null;
     }
 
-    public EncodedObjectRef add(byte[] encoded, Keccak256 hash) {
+    public EncodedObjectRef add(byte[] encoded, Keccak256 hash,boolean saved) {
         if (!accessByHash())
             throw new RuntimeException("invalid access");
         return null;

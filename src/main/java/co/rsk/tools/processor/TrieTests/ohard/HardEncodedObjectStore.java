@@ -9,8 +9,13 @@ import java.nio.ByteBuffer;
 
 public class HardEncodedObjectStore extends EncodedObjectStore {
 
-    public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftRef, EncodedObjectRef rightRef) {
-        return new HardObjectRef(encoded, leftRef, rightRef);
+    public EncodedObjectRef add(byte[] encoded, EncodedObjectRef leftRef, EncodedObjectRef rightRef,boolean saved) {
+        return new HardObjectRef(encoded, leftRef, rightRef,saved);
+    }
+
+    public void setSaved(EncodedObjectRef encodedRef,boolean saved) {
+        HardObjectRef hor = (HardObjectRef) encodedRef;
+        hor.saved = saved;
     }
 
     public ObjectReference retrieve(EncodedObjectRef encodedRef) {
@@ -21,6 +26,7 @@ public class HardEncodedObjectStore extends EncodedObjectStore {
         r.rightRef = hor.rightRef;
         r.len = hor.encoded.length;
         r.message = ByteBuffer.wrap(hor.encoded);
+        r.saved = hor.saved;
         return r;
     }
 

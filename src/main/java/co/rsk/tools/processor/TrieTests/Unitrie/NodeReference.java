@@ -35,6 +35,7 @@ public class NodeReference {
     private Trie lazyNode;
     private Keccak256 lazyHash;
     private EncodedObjectRef encodedRef;
+    private boolean loadedFromStore;
 
     public EncodedObjectRef getEncodedRef() {
         if ((encodedRef == null) && (lazyNode!=null)) {
@@ -68,6 +69,8 @@ public class NodeReference {
         } else {
             this.lazyNode = node;
             this.lazyHash = hash;
+            if (node!=null)
+                this.loadedFromStore = node.wasSaved();
             if (hash!=null) {
                 this.lazyHash = hash;
             }
@@ -88,6 +91,8 @@ public class NodeReference {
         ObjectReference r  = GlobalEncodedObjectStore.get().retrieve(encodedRef);
         try {
             Trie node = Trie.fromMessage(r.message, encodedRef, r.leftRef, r.rightRef, store);
+            if (r.saved)
+                node.markAsSaved();
             return node;
         } catch (java.nio.BufferUnderflowException e) {
             //encodeOfs: 3386664381
@@ -114,6 +119,7 @@ public class NodeReference {
     public Optional<Trie> getNode() {
         return getNode(false);
     }
+
     public Optional<Trie> getNode(boolean persistent) {
         if (lazyNode != null) {
             return Optional.of(lazyNode);
@@ -124,6 +130,7 @@ public class NodeReference {
                         (lazyHash !=null))) {
             if (persistent) {
                 lazyNode = getDynamicLazyNode();
+                this.loadedFromStore = lazyNode.wasSaved();
                 return Optional.of(lazyNode);
             } else
                 return Optional.of(getDynamicLazyNode());
@@ -147,6 +154,7 @@ public class NodeReference {
         }
 
         lazyNode = node.get();
+        loadedFromStore = true;
 
         return node;
     }
@@ -206,9 +214,9 @@ public class NodeReference {
 
     }
 
-    // the referenced node was loaded
+    // the referenced node was loaded from a TrieStore
     public boolean wasLoaded() {
-        return lazyNode != null;
+        return loadedFromStore;
     }
 
     // This method should only be called from save()

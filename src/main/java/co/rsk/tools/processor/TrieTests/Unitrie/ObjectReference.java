@@ -7,6 +7,7 @@ public class ObjectReference {
     public EncodedObjectRef leftRef;
     public EncodedObjectRef rightRef;
     public ByteBuffer message;
+    public boolean saved;
 
     public byte[] getAsArray() {
         byte[] data = new byte[len];
