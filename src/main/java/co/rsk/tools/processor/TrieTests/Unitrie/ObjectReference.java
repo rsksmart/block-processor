@@ -1,5 +1,7 @@
 package co.rsk.tools.processor.TrieTests.Unitrie;
 
+import org.ethereum.db.ByteArrayWrapper;
+
 import java.nio.ByteBuffer;
 
 public class ObjectReference {

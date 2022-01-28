@@ -311,32 +311,13 @@ public class DataSourceWithCACache implements KeyValueDataSource {
         }
     }
 
-    static class ComputeKeccakKey implements Function<byte[],ByteArrayWrapper> {
 
-        public ByteArrayWrapper apply(byte[]  data) {
-            return new ByteArrayWrapper(Keccak256Helper.keccak256(data));
-        }
-    }
-
-    static class ComputeHashFromKeccakKey implements CAHashMap.getHashcode<ByteArrayWrapper> {
-        public  int intFromBytes(byte b1, byte b2, byte b3, byte b4) {
-            return b1 << 24 | (b2 & 0xFF) << 16 | (b3 & 0xFF) << 8 | (b4 & 0xFF);
-        }
-        public int hashCodeFromHashDigest(byte[] bytes) {
-            // Use the last 4 bytes, not the first 4 which are often zeros in Bitcoin.
-            return intFromBytes(bytes[28], bytes[29], bytes[30], bytes[31]);
-        }
-        public int getHashcode(ByteArrayWrapper  data) {
-            return hashCodeFromHashDigest(data.getData());
-        }
-    }
-
-    static ComputeKeccakKey computeKey = new ComputeKeccakKey();
-    static ComputeHashFromKeccakKey computeHashFromKeccakKey = new ComputeHashFromKeccakKey();
+    // We need to limit the CAHashMap cache.
 
     private static Map<ByteArrayWrapper, byte[]> makeCommittedCache(int cacheSize,
                                                                      CacheSnapshotHandler cacheSnapshotHandler) {
-        Map<ByteArrayWrapper, byte[]> cache = new CAHashMap<>(cacheSize, 0.3f,computeKey,computeHashFromKeccakKey);
+        TrieCACacheRelation myKeyValueRelation = new TrieCACacheRelation();
+        Map<ByteArrayWrapper, byte[]> cache = new CAHashMap<>(cacheSize, 0.3f,myKeyValueRelation);
 
         if (cacheSnapshotHandler != null) {
             cacheSnapshotHandler.load(cache);

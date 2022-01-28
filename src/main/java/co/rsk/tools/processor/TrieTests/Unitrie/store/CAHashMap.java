@@ -22,6 +22,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
     static final int UNTREEIFY_THRESHOLD = 6;
     static final int MIN_TREEIFY_CAPACITY = 64;
     transient Object[] table;
+    //transient int[] timeStamps;
     transient Set<Entry<K, V>> entrySet;
     protected Class<V> valueClass;
     transient int size;
@@ -29,9 +30,16 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
     int threshold;
     float loadFactor;
     public int hashMapCount;
+    KeyValueRelation<K,V> keyValueRelation;
 
-    public interface getHashcode<T> {
-        int getHashcode(T var1);
+    public interface KeyValueRelation<K,V> {
+        int getHashcode(K var1);
+        K  getKeyFromData(V data);
+        boolean isData(Object obj);
+        long getPriority(V data);
+        void afterNodeAccess(V data);
+        void afterNodeInsertion(CAHashMap<K,V> map,V data,boolean evict,long latestPriority);
+        void afterNodeRemoval(long priority);
     }
 
     public int hash(Object key) {
@@ -42,10 +50,10 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
         //
         if (key == null)
             return 0;
-        if (getHashFunction == null)
+        if (keyValueRelation == null)
             return key.hashCode();
         else
-            return getHashFunction.getHashcode((K) key);
+            return keyValueRelation.getHashcode((K) key);
     }
 
 
@@ -54,12 +62,9 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
         return n < 0 ? 1 : (n >= 1073741824 ? 1073741824 : n + 1);
     }
 
-    Function<V, K> computeKeyFunction;
-    getHashcode<K> getHashFunction;
 
     public CAHashMap(int initialCapacity, float loadFactor,
-                     Function<V, K> computeKeyFunction,
-                     getHashcode<K> getHashFunction) {
+                     KeyValueRelation<K,V> keyValueRelation) {
         this.loadFactor = 0;
         if (initialCapacity < 0) {
             throw new IllegalArgumentException("Illegal initial capacity: " + initialCapacity);
@@ -76,12 +81,16 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
                 throw new IllegalArgumentException("Illegal load factor: " + loadFactor);
             }
         }
-        this.computeKeyFunction = computeKeyFunction;
-        this.getHashFunction = getHashFunction;
+
+        this.keyValueRelation = keyValueRelation;
     }
 
-    public CAHashMap(int initialCapacity, Function<V, K> computeKeyFunction,getHashcode<K> getHashFunction) {
-        this(initialCapacity, 0.75F, computeKeyFunction,getHashFunction);
+    public interface ShouldRemove<V> {
+        boolean remove(V data);
+    }
+
+    public CAHashMap(int initialCapacity, KeyValueRelation<K,V> keyValueRelation) {
+        this(initialCapacity, 0.75F, keyValueRelation);
     }
 
     public CAHashMap() {
@@ -127,8 +136,12 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
     }
 
     public V get(Object key) {
-        CAHashMap.Node e;
-        return (e = this.getNode(hash(key), key)) == null ? null : (V) e.getValue();
+        CAHashMap.Node e = this.getNode(hash(key), key);
+        if (e!=null) {
+            this.afterNodeAccess(e);
+            return (V) e.getValue();
+        } else
+            return null;
     }
 
     final CAHashMap.Node<K, V> getNode(int hash, Object key) {
@@ -139,7 +152,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
         int n;
         if ((tab = this.table) != null && (n = tab.length) > 0 && (firstObject = tab[n - 1 & hash]) != null) {
 
-            if (firstObject instanceof byte[]) { //valueClass
+            if (keyValueRelation.isData(firstObject)) { //valueClass
                 K aKey = computeKey(firstObject);
                 // Return a temporary node (unlinked)
                 if (aKey.equals(key))
@@ -155,7 +168,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
     }
 
     public CAHashMap.VirtualNode<K, V> newVirtualNode(Object[] tab, int tabIndex, K optKey) {
-        return new CAHashMap.VirtualNode<K, V>(tab, tabIndex, optKey, computeKeyFunction);
+        return new CAHashMap.VirtualNode<K, V>(tab, tabIndex, optKey, keyValueRelation);
     }
 
     public boolean containsKey(Object key) {
@@ -183,12 +196,15 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
         Object p;
         int i;
         p = tab[i = n - 1 & hash];
+        CAHashMap.Node<K, V> node;
+
         if (p == null) {
             tab[i] = value;
+            node = newVirtualNode(tab,i,key);
         } else {
             Map<K, CAHashMap.ValueNode<K, V>> hmap;
             ValueNode<K, V> oldNode;
-            if (p instanceof byte[]) {
+            if (keyValueRelation.isData(p)) {
                 // convert
                 hmap = newHashMap();
                 K oldNodeKey = computeKey(p);
@@ -204,10 +220,10 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
                 if (onlyIfAbsent && (oldNode != null))
                     return oldNode.getValue();
             }
-            ValueNode<K, V> node = newNode(hash, key, value);
+            node = newNode(hash, key, value);
 
-            hmap.put(key, node);
-            this.afterNodeAccess((CAHashMap.Node) node);
+            hmap.put(key, (CAHashMap.ValueNode) node);
+
 
             if (oldNode != null) {
                 oldValue = oldNode.getValue();
@@ -217,7 +233,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
             this.resize();
         }
 
-        this.afterNodeInsertion(evict);
+        this.afterNodeInsertion(node,evict);
         return oldValue;
     }
 
@@ -227,6 +243,42 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
         Map<K, CAHashMap.ValueNode<K, V>> ret = new HashMap(subMapInitialCapacity);
         hashMapCount++;
         return ret;
+    }
+
+    public void removeOnCondition(ShouldRemove<V> rem,boolean notifyRemoval) {
+        int tabLen = table.length;
+        for(int j = 0; j < tabLen; ++j) {
+            Object eObject= table[j];
+            if (eObject != null) {
+                if (keyValueRelation.isData(eObject )) {
+                    if (rem.remove((V) eObject)) {
+                        table[j] = null;
+                        size--;
+                        if (notifyRemoval)
+                            this.afterNodeRemoval(newVirtualNode(table,j,null));
+                    }
+
+                } else {
+                    Map<K,CAHashMap.ValueNode<K, V>> hmap = (Map<K,CAHashMap.ValueNode<K, V>>) eObject;
+                    Iterator<Entry<K, ValueNode<K, V>>> iter = hmap.entrySet().iterator();
+                    while(iter.hasNext()){
+                        Entry<K, ValueNode<K, V>> e =iter.next();
+                        if(rem.remove(e.getValue().getValue())){
+                            iter.remove();
+                            size--;
+                            if (notifyRemoval)
+                                this.afterNodeRemoval(e.getValue());
+                        }
+                    }
+                    if (hmap.size()==1) {
+                        for (Map.Entry<K,CAHashMap.ValueNode<K, V>> entry : hmap.entrySet()) {
+                            table[j] = entry.getValue().getValue();
+                        }
+                        hashMapCount--;
+                    }
+                }
+            }
+        }
     }
 
     final Object[] resize() {
@@ -266,18 +318,19 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
                 Object eObject= oldTab[j];
                 if (eObject != null) {
                     oldTab[j] = null;
-                    if (eObject instanceof byte[]) {
+                    if (keyValueRelation.isData(eObject )) {
                         K k = computeKey(eObject);
                         int hc = hash(k);
                         addToTable(newTab,newCap,hc,k,(V) eObject,null);
                     } else {
                         Map<K,CAHashMap.ValueNode<K, V>> hmap = (Map<K,CAHashMap.ValueNode<K, V>>) eObject;
                         // hmapiter
-                        for (Map.Entry<K,CAHashMap.ValueNode<K, V>> entry : hmap.entrySet()) {
-                            addToTable(newTab,newCap,hash(entry.getKey()),
-                                    entry.getKey(),entry.getValue().getValue(),
-                                    entry.getValue());
-                        }
+                        hmap.forEach( (k,v) -> addToTable(newTab,newCap,hash(k),k,v.getValue(),v));
+                        //for (Map.Entry<K,CAHashMap.ValueNode<K, V>> entry : hmap.entrySet()) {
+                        //    addToTable(newTab,newCap,hash(entry.getKey()),
+                        //            entry.getKey(),entry.getValue().getValue(),
+                        //            entry.getValue());
+                        //}
                     }
                 }
             }
@@ -294,8 +347,8 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
             tab[i] = value;
         else {
             Map<K, CAHashMap.ValueNode<K, V>> hmap;
-            if (p instanceof byte[]) {
-                byte[] oldValue = (byte[]) p;
+            if (keyValueRelation.isData(p)) {
+                V oldValue = (V) p;
                 K oldKey = computeKey(p);
                 hmap = newHashMap();
                 hmap.put(oldKey, newNode(hash(oldKey), oldKey, (V) oldValue));
@@ -326,7 +379,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
         int index;
         // Same key implies same value, so no point in value matching
         if ((tab = this.table) != null && (n = tab.length) > 0 && (pObject = tab[index = n - 1 & hash]) != null) {
-            if (pObject instanceof byte[]) {
+            if (keyValueRelation.isData(pObject)) {
                 K exKey = computeKey(pObject);
                 if (!exKey.equals(key)) {
                     return null;
@@ -343,8 +396,10 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
                     hashMapCount--;
                 }
             }
-            --this.size;
-            this.afterNodeRemoval((CAHashMap.Node)node);
+            if (node!=null) { // actual element removed
+                --this.size;
+                this.afterNodeRemoval((CAHashMap.Node) node);
+            }
             return node;
         }
 
@@ -491,14 +546,18 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
                 int tabLen = tab.length;
 
                 for(int i = 0; i < tabLen; ++i) {
-                    if (tab[i] instanceof byte[]) {
+                    if (tab[i]==null)
+                        continue;
+                    if (keyValueRelation.isData(tab[i])) {
                         K aKey = computeKey(tab[i]);
                         action.accept(aKey, (V) tab[i]);
                     } else {
                         Map<K,CAHashMap.ValueNode<K, V>> hmap = (HashMap<K,CAHashMap.ValueNode<K, V>>)  tab[i];
-                        for (Map.Entry<K,CAHashMap.ValueNode<K, V>> entry : hmap.entrySet()) {
-                            action.accept(entry.getKey(), entry.getValue().getValue());
-                        }
+                        // This is much faster
+                        hmap.forEach( (k,v) -> action.accept(k,v.getValue()));
+                        //for (Map.Entry<K,CAHashMap.ValueNode<K, V>> entry : hmap.entrySet()) {
+                        //    action.accept(entry.getKey(), entry.getValue().getValue());
+                       // }
                     }
                 }
 
@@ -520,11 +579,12 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
                 int tabLen = tab.length;
 
                 for(int i = 0; i < tabLen; ++i) {
-                    if (tab[i] instanceof byte[]) {
+                    if (keyValueRelation.isData(tab[i])) {
                         Object eObject = tab[i];
                         tab[i] = function.apply(computeKey(eObject),(V) eObject);
                     } else {
                         Map<K,CAHashMap.ValueNode<K, V>> hmap = (HashMap<K,CAHashMap.ValueNode<K, V>>)  tab[i];
+                        // entrySet() is slow: use hmap.forEach or hmap.replaceAll
                         for (Map.Entry<K,CAHashMap.ValueNode<K, V>> entry : hmap.entrySet()) {
                             CAHashMap.ValueNode<K, V> e = entry.getValue();
                             e.setValue( function.apply((K) e.getKey(), (V) e.getValue()));
@@ -541,7 +601,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
     }
 
     public K computeKey(Object e) {
-        return computeKeyFunction.apply((V) e);
+        return keyValueRelation.getKeyFromData((V) e);
     }
 
     public Object clone() {
@@ -629,7 +689,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
     void afterNodeAccess(CAHashMap.Node<K, V> p) {
     }
 
-    void afterNodeInsertion(boolean evict) {
+    void afterNodeInsertion(CAHashMap.Node<K, V> p, boolean evict) {
     }
 
     void afterNodeRemoval(CAHashMap.Node<K, V> p) {
@@ -641,7 +701,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
             int tabLen = tab.length;
 
             for(int i = 0; i < tabLen; ++i) {
-                if (tab[i] instanceof byte[]) {
+                if (keyValueRelation.isData(tab[i])) {
                     Object  eObject =tab[i];
                     s.writeObject(computeKey(eObject));
                     s.writeObject(eObject);
@@ -657,6 +717,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
 
     }
 
+    // For each entry in the map. Each entry contains key and value.
     public final void forEach(Consumer<? super Entry<K, V>> action) {
         if (action == null) {
             throw new NullPointerException();
@@ -667,12 +728,14 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
 
                 int tabLen = tab.length;
                 for (int i = 0; i < tabLen; ++i) {
-                    if (tab[i] instanceof byte[]) {
+                    if (keyValueRelation.isData(tab[i])) {
                         CAHashMap.Node<K, V> e = newVirtualNode(tab, i, null);
                         action.accept(e);
 
                     } else {
                         Map<K, CAHashMap.ValueNode<K, V>> hmap = (Map<K, CAHashMap.ValueNode<K, V>>) tab[i];
+                        // hmap.forEach() should be better here.
+                        // (Map.Entry<K, CAHashMap.ValueNode<K, V>> x) -> action.accept( x.getValue());
                         for (Map.Entry<K, CAHashMap.ValueNode<K, V>> entry : hmap.entrySet()) {
                             action.accept(entry.getValue());
                         }
@@ -716,10 +779,10 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
     static class VirtualNode<K, V> extends Node<K, V>  {
         int tabIndex;
         Object[] tab;
-        Function<V,K> computeKeyFunction;
+        KeyValueRelation<K,V>  computeKeyFunction;
         K optKey;
 
-        VirtualNode(Object[] tab,int tabIndex,K optKey,Function<V,K> computeKeyFunction) {
+        VirtualNode(Object[] tab,int tabIndex,K optKey,KeyValueRelation<K,V> computeKeyFunction) {
             this.tab = tab;
             this.tabIndex = tabIndex;
             this.optKey = optKey; // may be nulll
@@ -728,7 +791,7 @@ public class CAHashMap<K, V> extends AbstractMap<K, V> implements Map<K, V>, Clo
 
         public final K getKey() {
             if (optKey==null)
-                optKey = computeKeyFunction.apply((V) tab[tabIndex]);
+                optKey = computeKeyFunction.getKeyFromData((V) tab[tabIndex]);
             return optKey;
         }
 
