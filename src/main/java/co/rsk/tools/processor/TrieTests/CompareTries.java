@@ -15,10 +15,7 @@ import co.rsk.tools.processor.examples.storage.ObjectIO;
 import org.ethereum.datasource.DataSourceWithCache;
 import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.datasource.LevelDbDataSource;
-import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
-import org.ethereum.util.FastByteComparisons;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
@@ -142,6 +139,7 @@ public class CompareTries extends Benchmark {
         // 0.1 bitcoin
         TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
 
+        stateTrieSim.setSimMode(testMode);
         computeAverageAccountSize();
         computeKeySizes();
 

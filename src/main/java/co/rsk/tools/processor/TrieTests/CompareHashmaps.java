@@ -14,6 +14,7 @@ public class CompareHashmaps extends Benchmark {
     StateTrieSimulator stateTrieSim = new StateTrieSimulator();
 
     public void computeAverageAccountSize() {
+        stateTrieSim.setSimMode(StateTrieSimulator.SimMode.simEOAs);
         stateTrieSim.computeAverageAccountSize();
         log("Average account size: "+stateTrieSim.accountSize);
     }
