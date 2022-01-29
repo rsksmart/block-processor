@@ -150,8 +150,18 @@ public class UnitrieUnitTests {
         } else
             throw new RuntimeException("mismatch2");
     }
+
+
+    private static boolean IS_64_BIT_JVM;
+
+    public static void printOverhead() {
+        String arch = System.getProperty("sun.arch.data.model");
+        IS_64_BIT_JVM = (arch == null) || arch.contains("32");
+
+    }
     public static void main (String args[]) {
         UnitrieUnitTests u = new UnitrieUnitTests();
+        u.printOverhead();
         u.testCACache();
         u.unittest_ByteArrayHashMap();
     }

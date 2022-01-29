@@ -728,13 +728,13 @@ public class CompareTries extends Benchmark {
 
 
     enum DataStructure {
-        CACache,
+        CAHashMap,
         HashMap,
         LinkedHashMap,
-        LinkedCACache,
-        NumberedCACache,
+        LinkedCAHashMap,
+        NumberedCAHashMap,
         MaxSizeHashMap,
-        MaxSizeCACache,
+        MaxSizeCAHashMap,
         ByteArrayHashMap,
         MaxSizeByteArrayHashMap
 

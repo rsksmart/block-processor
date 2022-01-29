@@ -50,7 +50,7 @@ public class CompareHashmaps extends Benchmark {
 
         switch (testDS) {
             case    MaxSizeHashMap:
-            case    MaxSizeCACache:
+            case MaxSizeCAHashMap:
             case    MaxSizeByteArrayHashMap:
                 maxSize = vmax;//+1; //8_000_000;
         }
@@ -58,7 +58,7 @@ public class CompareHashmaps extends Benchmark {
         int initialSize = (int) (maxSize/loadFActor);
 
         start(true);
-        if (testDS== CompareTries.DataStructure.CACache) {
+        if (testDS== CompareTries.DataStructure.CAHashMap) {
             camap = new CAHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor, myKeyValueRelation);
             map = camap;
         } else
@@ -68,12 +68,12 @@ public class CompareHashmaps extends Benchmark {
         if (testDS== CompareTries.DataStructure.HashMap) {
             map =  new HashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor);
         } else
-        if (testDS== CompareTries.DataStructure.NumberedCACache) {
+        if (testDS== CompareTries.DataStructure.NumberedCAHashMap) {
             TSNodeCACacheRelation myTSKeyValueRelation = new TSNodeCACacheRelation(0);
             tsmap = new CAHashMap<ByteArrayWrapper, TSNode>((int) initialSize, loadFActor, myTSKeyValueRelation);
             map = camap;
         } else
-        if (testDS== CompareTries.DataStructure.MaxSizeCACache) {
+        if (testDS== CompareTries.DataStructure.MaxSizeCAHashMap) {
             TSNodeCACacheRelation myTSKeyValueRelation = new TSNodeCACacheRelation(maxSize);
             tsmap = new MaxSizeCAHashMap<ByteArrayWrapper, TSNode>((int) initialSize, loadFActor, myTSKeyValueRelation);
             map = camap;
