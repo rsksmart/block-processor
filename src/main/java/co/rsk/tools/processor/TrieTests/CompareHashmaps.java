@@ -35,14 +35,21 @@ public class CompareHashmaps extends Benchmark {
     ///////////////////////////////////////////////////////////////////////
     public void testHashmapReplacement() {
         TrieCACacheRelation myKeyValueRelation = new TrieCACacheRelation();
-        float loadFActor = 0.3f;
+        // For linear-probing hashmaps, the load factor must be low (i.e. 0.3f)
+        // For hashmaps with linked-list or tree buckets, it can be much higher (i.e. 0.75f=
+
+        float loadFactorForLinearProbing = 0.3f;
+        float loadFactorForMultiBuckets = 0.75f;
+
 
         // This is the hashmap that we're going to test. You can
         // find all hashmaps data structures that are being tested
         // in the DataStructure enum.
         DataStructure testDS;
-        //testDS= DataStructure.MaxSizeLinkedByteArrayHashMap; //MaxSizeByteArrayHashMap;
-        testDS = DataStructure.MaxSizeHashMap;
+        testDS= DataStructure.MaxSizeLinkedByteArrayHashMap; //MaxSizeByteArrayHashMap;
+        //testDS = DataStructure.MaxSizeHashMap;
+
+        float loadFactor = loadFactorForLinearProbing;
 
         CAHashMap<ByteArrayWrapper, byte[]> camap =null;
         AbstractMap<ByteArrayWrapper, byte[]> map=null;
@@ -52,37 +59,51 @@ public class CompareHashmaps extends Benchmark {
         int maxSize = vmax;
 
         String testClass ="";
+        switch (testDS) {
+            case ByteArrayHashMap:
+            case PrioritizedByteArrayHashMap:
+            case MaxSizeMetadataLinkedByteArrayHashMap:
+            case MaxSizeLinkedByteArrayHashMap:
+                loadFactor = loadFactorForLinearProbing;
+                break;
+            default:
+                loadFactor = loadFactorForMultiBuckets;
+        }
+
+        System.out.println("loadFactor: "+loadFactor);
 
         switch (testDS) {
             case MaxSizeHashMap:
             case MaxSizeCAHashMap:
-            case MaxSizeByteArrayHashMap:
+            case MaxSizeMetadataLinkedByteArrayHashMap:
             case PrioritizedByteArrayHashMap:
             case MaxSizeLinkedByteArrayHashMap:
                 maxSize = 1_000_000; // vmax;//+1; //8_000_000;
         }
+        System.out.println("maxSize: "+maxSize);
 
-        int initialSize = (int) (maxSize/loadFActor);
+        int initialSize = (int) (maxSize/loadFactor);
+        System.out.println("initialSize: "+initialSize);
 
         start(true);
         if (testDS== DataStructure.CAHashMap) {
-            camap = new CAHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor, myKeyValueRelation);
+            camap = new CAHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFactor, myKeyValueRelation);
             map = camap;
         } else
         if (testDS== DataStructure.LinkedHashMap) {
-            map =  new LinkedHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor);
+            map =  new LinkedHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFactor);
         } else
         if (testDS== DataStructure.HashMap) {
-            map =  new HashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor);
+            map =  new HashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFactor);
         } else
         if (testDS== DataStructure.NumberedCAHashMap) {
             TSNodeCACacheRelation myTSKeyValueRelation = new TSNodeCACacheRelation(0);
-            tsmap = new CAHashMap<ByteArrayWrapper, TSNode>((int) initialSize, loadFActor, myTSKeyValueRelation);
+            tsmap = new CAHashMap<ByteArrayWrapper, TSNode>((int) initialSize, loadFactor, myTSKeyValueRelation);
             map = camap;
         } else
         if (testDS== DataStructure.MaxSizeCAHashMap) {
             TSNodeCACacheRelation myTSKeyValueRelation = new TSNodeCACacheRelation(maxSize);
-            tsmap = new MaxSizeCAHashMap<ByteArrayWrapper, TSNode>((int) initialSize, loadFActor, myTSKeyValueRelation);
+            tsmap = new MaxSizeCAHashMap<ByteArrayWrapper, TSNode>((int) initialSize, loadFactor, myTSKeyValueRelation);
             map = camap;
         } else
         if (testDS== DataStructure.MaxSizeHashMap) {
@@ -92,20 +113,20 @@ public class CompareHashmaps extends Benchmark {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             int avgElementSize =88;
             long beHeapCapacity =(long) vmax*avgElementSize*11/10;
-            map =  new ByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,0 );
+            map =  new ByteArrayHashMap(initialSize,loadFactor,myKR,(long) beHeapCapacity,null,0 );
         }
         else
-        if (testDS== DataStructure.MaxSizeByteArrayHashMap) {
+        if (testDS== DataStructure.MaxSizeMetadataLinkedByteArrayHashMap) {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             SimpleByteArrayRefHeap sharedBaHeap = new SimpleByteArrayRefHeap(maxSize,8);
-            MaxSizeByteArrayHashMap pmap =  new MaxSizeByteArrayHashMap(initialSize,loadFActor,myKR,0,sharedBaHeap,
+            MaxSizeByteArrayHashMap pmap =  new MaxSizeByteArrayHashMap(initialSize,loadFactor,myKR,0,sharedBaHeap,
                     maxSize );
             map = pmap;
         } else
         if (testDS== DataStructure.MaxSizeLinkedByteArrayHashMap) {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             LinkedByteArrayRefHeap sharedBaHeap = new LinkedByteArrayRefHeap(maxSize,8);
-            MaxSizeLinkedByteArrayHashMap pmap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFActor,myKR,0,sharedBaHeap,
+            MaxSizeLinkedByteArrayHashMap pmap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFactor,myKR,0,sharedBaHeap,
                     maxSize );
             map = pmap;
         } else
@@ -119,7 +140,7 @@ public class CompareHashmaps extends Benchmark {
             else
                 beHeapCapacity =(long) maxSize*avgElementSize*14/10;
 
-            PrioritizedByteArrayHashMap pmap =  new PrioritizedByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,maxSize );
+            PrioritizedByteArrayHashMap pmap =  new PrioritizedByteArrayHashMap(initialSize,loadFactor,myKR,(long) beHeapCapacity,null,maxSize );
             pmap.removeInBulk = removeInBulk;
             map = pmap;
         }
@@ -156,6 +177,10 @@ public class CompareHashmaps extends Benchmark {
             }
             if (i % 100_0000==0) {
                 dumpMemProgress(i,vmax);
+                if ((map!=null) && (map instanceof  ByteArrayHashMap)) {
+                    int longest = ((ByteArrayHashMap) map).longestFilledRun();
+                    System.out.println("Hashmap longest filled run: "+longest);
+                }
             }
         }
         stop(true);
@@ -239,7 +264,7 @@ public class CompareHashmaps extends Benchmark {
         MaxSizeCAHashMap,
         ByteArrayHashMap,
         PrioritizedByteArrayHashMap,
-        MaxSizeByteArrayHashMap,
+        MaxSizeMetadataLinkedByteArrayHashMap,
         MaxSizeLinkedByteArrayHashMap
     }
 }

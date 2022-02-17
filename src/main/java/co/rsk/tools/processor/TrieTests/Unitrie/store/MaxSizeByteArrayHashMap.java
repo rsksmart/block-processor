@@ -49,18 +49,18 @@ public class MaxSizeByteArrayHashMap extends ByteArrayHashMap {
     void itemStored(int markedHandle) {
         Link tailLink = null;
         if (tail!=-1) {
-            byte[] tailMetadata = baHeap.retrieveMetadata(maskHandle(tail));
+            byte[] tailMetadata = baHeap.retrieveMetadata(unmarkHandle(tail));
             tailLink = new Link(tailMetadata);
         }
         byte[] m = new byte[metadataSize];
         Link newHeadLink = new Link(tail,-1,m);
         newHeadLink.store();
-        baHeap.setMetadata(maskHandle(markedHandle),newHeadLink.metadata);
+        baHeap.setMetadata(unmarkHandle(markedHandle),newHeadLink.metadata);
 
         if (tail!=-1) {
             tailLink.next = markedHandle;
             tailLink.store();
-            baHeap.setMetadata(maskHandle(tail), tailLink.metadata);
+            baHeap.setMetadata(unmarkHandle(tail), tailLink.metadata);
         } else {
             head = markedHandle;
             tail = markedHandle;
@@ -73,7 +73,7 @@ public class MaxSizeByteArrayHashMap extends ByteArrayHashMap {
         if (size<maxElements) return;
 
         // Take one element from the head
-        int headHandle = maskHandle(head);
+        int headHandle = unmarkHandle(head);
         byte[] headMetadata = baHeap.retrieveMetadata(headHandle);
         Link headLink = new Link(headMetadata);
         byte[] headData = baHeap.retrieveData(headHandle);
@@ -93,7 +93,7 @@ public class MaxSizeByteArrayHashMap extends ByteArrayHashMap {
 
     void afterNodeAccess(int markedHandle, byte[] p) {
         // Unlink and relink at tail
-        int handle = maskHandle(markedHandle);
+        int handle = unmarkHandle(markedHandle);
         byte[] metadata = baHeap.retrieveMetadata(handle);
         Link link = new Link(metadata);
         int prev = link.prev;
@@ -111,7 +111,7 @@ public class MaxSizeByteArrayHashMap extends ByteArrayHashMap {
     }
 
     void setLink(int markedHandle,boolean setPrev,int prev,boolean setNext,int next) {
-        int handle = maskHandle(markedHandle);
+        int handle = unmarkHandle(markedHandle);
         byte[] metadata = baHeap.retrieveMetadata(handle);
         Link link = new Link(metadata);
         if (setNext)

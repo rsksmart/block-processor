@@ -23,26 +23,5 @@ public class MyBAKeyValueRelation implements ByteArrayHashMap.BAKeyValueRelation
     public ByteArrayWrapper getKeyFromData(byte[] data) {
         return new ByteArrayWrapper(Keccak256Helper.keccak256(data));
     }
-/*
-    @Override
-    public long getPriority(byte[] data) {
-        return 0;
-    }
 
-    @Override
-    public void afterNodeAccess(byte[] data) {
-
-    }
-
-    @Override
-    public void afterNodeInsertion(ByteArrayHashMap map, byte[] data, boolean evict, long latestPriority) {
-
-    }
-
-    @Override
-    public void afterNodeRemoval(long priority) {
-
-    }
-
- */
 }

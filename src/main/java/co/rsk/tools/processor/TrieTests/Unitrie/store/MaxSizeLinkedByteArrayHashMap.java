@@ -7,6 +7,12 @@ import java.util.BitSet;
 public class MaxSizeLinkedByteArrayHashMap extends ByteArrayHashMap {
 
     LinkedByteArrayRefHeap lba;
+
+    // The isNull bitset is necessary because we need to know if a heap entry
+    // corresponds to a key or to a value without knowing the index of the entry
+    // on table[].
+    // This means that if this class were to be integrated into the ByteArrayHashMap,
+    // the marking of the handle would not be necessary.
     BitSet isNull;
 
     public MaxSizeLinkedByteArrayHashMap(int initialCapacity, float loadFactor,
@@ -22,20 +28,22 @@ public class MaxSizeLinkedByteArrayHashMap extends ByteArrayHashMap {
 
 
     void afterNodeInsertion(int markedHandle,byte[] key, byte[] data, boolean evict) {
-        int handle = maskHandle(markedHandle);
+        int handle = unmarkHandle(markedHandle);
         // It is automatically added to the tail.
-        if (!isValueHandle(markedHandle))
+        if (isNullHandle(markedHandle))
             isNull.set(handle);
         else
             isNull.clear(handle);
 
 
         if (!evict) return;
-        if (size<maxElements) return;
+        if (size < maxElements) return;
+        evictOldest();
+    }
 
+    void evictOldest() {
         int oldest = lba.getOldest();
         byte[] pdata = baHeap.retrieveData(oldest);
-
 
         ByteArrayWrapper wkey;
 
@@ -53,7 +61,7 @@ public class MaxSizeLinkedByteArrayHashMap extends ByteArrayHashMap {
 
     void afterNodeAccess(int markedHandle, byte[] p) {
         // Unlink and relink at tail
-        lba.setAsNew(maskHandle(markedHandle));
+        lba.setAsNew(unmarkHandle(markedHandle));
     }
 
 }

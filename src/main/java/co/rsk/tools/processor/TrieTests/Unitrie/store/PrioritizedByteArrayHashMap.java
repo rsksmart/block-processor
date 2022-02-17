@@ -9,6 +9,8 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
     int minPriority;
     public int MaxPriority = Integer.MAX_VALUE;
     public boolean removeInBulk = false;
+    public boolean moveToTopAccessedItems = true;
+    int startScanForRemoval =0;
 
     public PrioritizedByteArrayHashMap(int initialCapacity, float loadFactor,
                             BAKeyValueRelation BAKeyValueRelation,
@@ -21,7 +23,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
     public int getPriority(Object key) {
         int e = this.getNode(hash(key), key);
         if (e!=-1) {
-            e = maskHandle(e);
+            e = unmarkHandle(e);
             byte[] metadata =baHeap.retrieveMetadata(e);
             int priority = ObjectIO.getInt(metadata,0);
             return priority;
@@ -32,7 +34,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
     public void refreshedHandle(int p)  {
         // Update priority
         if ((maxElements!=0) && (moveToTopAccessedItems)) {
-            p = maskHandle(p);
+            p = unmarkHandle(p);
             byte[] metadata = baHeap.retrieveMetadata(p);
             int priority = ObjectIO.getInt(metadata,0);
             priority = currentPriority++;
@@ -44,7 +46,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
     public byte[] getOptionalMetadata(int handle)  {
         byte[] metadata = null;
         if (maxElements>0)
-            metadata = baHeap.retrieveMetadata(maskHandle(handle));
+            metadata = baHeap.retrieveMetadata(unmarkHandle(handle));
         return metadata;
     }
 
@@ -92,7 +94,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
         for (int c = 0; c < count; ++c) {
             int p = table[j];
             if (p != empty) {
-                byte[] metadata =baHeap.retrieveMetadata(maskHandle(p));
+                byte[] metadata =baHeap.retrieveMetadata(unmarkHandle(p));
                 int priority = ObjectIO.getInt(metadata,0);
 
                 if (priority<minPriority) {
@@ -107,7 +109,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
                         j =j;
                     if (notifyRemoval) {
                         if (!isValueHandle(p)) {
-                            byte[] key =    baHeap.retrieveData(maskHandle(p));
+                            byte[] key =    baHeap.retrieveData(unmarkHandle(p));
                             this.afterNodeRemoval(key,null, metadata);
                         } else {
                             byte[] data = baHeap.retrieveData(p);
@@ -126,7 +128,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
                 if (doremap) {
                     // Note: some elements in the wrap-around boundary [(from+count-1)..from]
                     // May be marked two times for remap.
-                    baHeap.remap(maskHandle(p));
+                    baHeap.remap(unmarkHandle(p));
                 }
             }
             j = (j+1) & mask;
@@ -231,7 +233,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
         for (int c = 0; c < count; ++c) {
             int p = table[c];
             if (p != empty) {
-                p = maskHandle(p);
+                p = unmarkHandle(p);
                 byte[] metadata = baHeap.retrieveMetadata(p);
                 int priority = ObjectIO.getInt(metadata,0);
                 if (priority<minPriority)
