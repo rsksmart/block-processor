@@ -6,7 +6,7 @@ import org.ethereum.util.ByteUtil;
 import java.util.*;
 
 
-public class ByteArrayRefHeap extends ByteArrayHeapBase {
+public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteArrayRefHeap {
     // The number of maxObjects must be at least 5 times higher than the number of
     // elements that will be inserted in the trie because intermediate nodes
     // consume handles also.
@@ -77,6 +77,10 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase {
         unusedHandlesCount = maxReferences;
 
         super.reset();
+    }
+
+    public void remove(int handle) {
+        // removes are handled with remaps. You can't remove a single element
     }
 
     public void clearRemapMode() {
@@ -236,8 +240,10 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase {
                 unusedHandlesCount++;
             }
         }
-        if (debugLogInfo)
+        if (debugLogInfo) {
             System.out.println("Disposed handles: " + disposedHandles);
+            System.out.println("unusedHandlesCount: "+ unusedHandlesCount);
+        }
     }
 
     public void checkAll() {
@@ -311,7 +317,7 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase {
         // mark if it needs movement
         if (handle != -1) {
             if (touchedHandles.get(handle)) {
-                System.out.println("duble remap: "+handle);
+                System.out.println("double remap: "+handle);
                 if (rejectDoubleRemaps)
                     throw new RuntimeException("double remap rejected");
             } else
@@ -378,6 +384,9 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase {
 
         space.memTop = newMemTop;
         long ofs = buildPointer(curSpaceNum, oldMemTop);
+        if (unusedHandlesCount==0) {
+            throw new RuntimeException("No more handles!");
+        }
         int newHandle = unusedHandles[unusedHandlesCount - 1];
         unusedHandlesCount--;
         references[newHandle] = ofs;

@@ -2,6 +2,7 @@ package co.rsk.tools.processor.TrieTests;
 
 import co.rsk.tools.processor.TrieTests.Unitrie.store.ByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.CAHashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.PrioritizedByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.TrieCACacheRelation;
 import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
@@ -10,6 +11,15 @@ import org.ethereum.util.FastByteComparisons;
 import java.util.List;
 
 public class UnitrieUnitTests {
+
+    public byte[] getByteArrayFromInt(int i) {
+        byte[] v1 = new byte[4];
+        v1[0] = (byte) (i & 0xff);
+        v1[1] = (byte) ((i >> 8) & 0xff);
+        v1[2] = (byte) ((i >> 16) & 0xff);
+        v1[3] = (byte) ((i >> 24) & 0xff);
+        return v1;
+    }
 
     public void unittest_ByteArrayHashMap() {
         MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
@@ -22,7 +32,7 @@ public class UnitrieUnitTests {
         float loadFActor = 0.3f;
         beHeapCapacity =(long) maxSize*avgElementSize*14/10;
 
-        ByteArrayHashMap bamap =  new ByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,maxSize );
+        PrioritizedByteArrayHashMap bamap =  new PrioritizedByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,maxSize );
         bamap.removeInBulk = removeInBulk;
         bamap.MaxPriority = 30;
         boolean dumpTables = false;
@@ -31,11 +41,7 @@ public class UnitrieUnitTests {
         // When the 30th element is inserted, all priorities will be
         // reduced by 10.
         for (int i=0;i<vmax;i++) {
-            byte[] v1 = new byte[4];
-            v1[0] = (byte) (i & 0xff);
-            v1[1] = (byte) ((i >> 8) & 0xff);
-            v1[2] = (byte) ((i >> 16) & 0xff);
-            v1[3] = (byte) ((i >> 24) & 0xff);
+            byte[] v1 = getByteArrayFromInt(i);
 
             System.out.println("adding "+i+" value "+ ByteUtil.toHexString(v1));
 
@@ -139,6 +145,12 @@ public class UnitrieUnitTests {
         if (a!=b)
             throw new RuntimeException("mismatch");
     }
+
+    public void checkEqual(boolean a, boolean b) {
+        if (a!=b)
+            throw new RuntimeException("mismatch");
+    }
+
     public void checkEqual(byte[] a, byte[] b) {
         if ((a==null) && (b==null))
             return;
@@ -159,8 +171,50 @@ public class UnitrieUnitTests {
         IS_64_BIT_JVM = (arch == null) || arch.contains("32");
 
     }
+
+    public void testByteArrayHashMap() {
+        MyBAKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
+        // First, create  a map without maximums
+        ByteArrayHashMap ba = new ByteArrayHashMap(100,0.3f,myBAKeyValueRelation,
+                100*100,null,0);
+        int max = 10;
+        ByteArrayWrapper[] k = new ByteArrayWrapper[max];
+        byte[][] v = new byte[max][];
+        for(int i=0;i<max;i++) {
+            v[i] = getByteArrayFromInt(1);
+            k[i] = myBAKeyValueRelation.getKeyFromData(v[i]);
+        }
+
+        ba.put(v[1]);
+        checkEqual(ba.containsKey(k[1]),true);
+        checkEqual(ba.get(k[1]),v[1]);
+
+        ba.put(k[2],null); // put a key with null
+        checkEqual(ba.containsKey(k[2]),true);
+        checkEqual(ba.get(k[1]),null);
+
+        // Add a second null, it should do nothing
+        ba.put(k[2],null); // put a key with null
+        checkEqual(ba.containsKey(k[2]),true);
+        checkEqual(ba.get(k[1]),null);
+
+
+        // Now store a real value, removing the previous null
+        ba.put(k[2],v[2]);
+        checkEqual(ba.containsKey(k[2]),true);
+        checkEqual(ba.get(k[2]),v[2]);
+
+        // Now remove it completely
+        ba.remove(k[2]);
+        checkEqual(ba.containsKey(k[2]),false);
+        checkEqual(ba.get(k[2]),null);
+
+
+    }
     public static void main (String args[]) {
         UnitrieUnitTests u = new UnitrieUnitTests();
+        u.testByteArrayHashMap();
+        System.exit(0);
         u.printOverhead();
         u.testCACache();
         u.unittest_ByteArrayHashMap();

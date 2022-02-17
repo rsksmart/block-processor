@@ -18,12 +18,11 @@
  */
 package co.rsk.tools.processor.TrieTests.Unitrie.store;
 
-import co.rsk.tools.processor.TrieTests.CompareTries;
+
 import co.rsk.tools.processor.TrieTests.Logger;
 import co.rsk.tools.processor.TrieTests.LoggerFactory;
 import co.rsk.util.FormatUtils;
-import co.rsk.util.MaxSizeHashMap;
-import org.ethereum.crypto.Keccak256Helper;
+
 import org.ethereum.datasource.CacheSnapshotHandler;
 import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.db.ByteArrayWrapper;
@@ -79,6 +78,10 @@ public class DataSourceWithCACache implements KeyValueDataSource {
         this.lock.readLock().lock();
 
         try {
+            // An element cannot be in both the committed or uncommitted cache
+            // if it is in the committed cache, it won't be on the other.
+            // therefore the order of the containsKey() check is irrelevant.
+
             if (committedCache.containsKey(wrappedKey)) {
                 return committedCache.get(wrappedKey);
             }
@@ -93,8 +96,16 @@ public class DataSourceWithCACache implements KeyValueDataSource {
                 numOfGetsFromStore.incrementAndGet();
             }
 
+            // Why would a null value be needed here?
+            // Only if an element is read from the database but it's missing
+            // but how can it be missing if the key is a hash of the node ??
+            // The ONLY case is that save() is testing if the node exists, to avoid
+            // storing it. If it doesn't exists, it will immediately store it
+            // therefore, there is absolutely no need to store null.
             //null value, as expected, is allowed here to be stored in committedCache
-            committedCache.put(wrappedKey, value);
+            //null value indicates the removal of the element.
+            if (value!=null)
+                  committedCache.put(wrappedKey, value);
         }
         finally {
             if (traceEnabled) {
@@ -314,7 +325,7 @@ public class DataSourceWithCACache implements KeyValueDataSource {
 
     // We need to limit the CAHashMap cache.
 
-    private static Map<ByteArrayWrapper, byte[]> makeCommittedCache(int cacheSize,
+    protected Map<ByteArrayWrapper, byte[]> makeCommittedCache(int cacheSize,
                                                                      CacheSnapshotHandler cacheSnapshotHandler) {
         TrieCACacheRelation myKeyValueRelation = new TrieCACacheRelation();
         Map<ByteArrayWrapper, byte[]> cache = new CAHashMap<>(cacheSize, 0.3f,myKeyValueRelation);

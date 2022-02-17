@@ -43,6 +43,7 @@ public class Benchmark {
         }
         endMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
     }
+
     public void userGarbageCollector() {
 
     }
@@ -129,10 +130,11 @@ public class Benchmark {
     }
 
     public void dumpSpeedResults(int max) {
-        elapsedTime = (ended - started) / 1000;
+        long elapsedTimeMs = (ended - started);
+        elapsedTime =  elapsedTimeMs/ 1000;
         log("Elapsed time [s]: " + elapsedTime);
-        if (elapsedTime!=0) {
-            log("Rate nodes/sec: " + (max / elapsedTime));
+        if (elapsedTimeMs!=0) {
+            log("Rate nodes/sec: " + (max*1000L / elapsedTimeMs));
         }
     }
 

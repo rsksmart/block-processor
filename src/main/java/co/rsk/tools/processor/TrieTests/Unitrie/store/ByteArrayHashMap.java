@@ -1,8 +1,8 @@
 package co.rsk.tools.processor.TrieTests.Unitrie.store;
 
 
+import co.rsk.tools.processor.TrieTests.Unitrie.AbstractByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.ByteArrayRefHeap;
-import co.rsk.tools.processor.examples.storage.ObjectIO;
 import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
 
@@ -19,9 +19,6 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
     static final int DEFAULT_INITIAL_CAPACITY = 16;
     static final int MAXIMUM_CAPACITY = 1073741824;
     static final float DEFAULT_LOAD_FACTOR = 0.5F;
-    static final int TREEIFY_THRESHOLD = 8;
-    static final int UNTREEIFY_THRESHOLD = 6;
-    static final int MIN_TREEIFY_CAPACITY = 64;
     static final long defaultNewBeHeapCapacity = 750_000_000;
     static final int empty = Integer.MIN_VALUE;
     static final boolean debugCheckHeap = false;
@@ -32,10 +29,8 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
     float loadFactor;
     public int hashMapCount;
     int maxElements;
-    int currentPriority;
-    int minPriority;
-    public int MaxPriority = Integer.MAX_VALUE;
-    public boolean removeInBulk = false;
+
+    public boolean moveToTopAccessedItems = true;
     int startScanForRemoval =0;
     boolean logEvents = true;
 
@@ -58,10 +53,10 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
     public interface BAKeyValueRelation {
         int getHashcode(ByteArrayWrapper var1);
         ByteArrayWrapper  getKeyFromData(byte[] data);
-        long getPriority(byte[] data);
-        void afterNodeAccess(byte[] data);
-        void afterNodeInsertion(ByteArrayHashMap map, byte[] data, boolean evict, long latestPriority);
-        void afterNodeRemoval(long priority);
+        //long getPriority(byte[] data);
+        //void afterNodeAccess(byte[] data);
+        //void afterNodeInsertion(ByteArrayHashMap map, byte[] data, boolean evict, long latestPriority);
+        //void afterNodeRemoval(long priority);
     }
 
     public int hash(Object key) {
@@ -88,7 +83,7 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
     public ByteArrayHashMap(int initialCapacity, float loadFactor,
                             BAKeyValueRelation BAKeyValueRelation,
                             long newBeHeapCapacity,
-                            ByteArrayRefHeap sharedBaHeap,
+                            AbstractByteArrayRefHeap sharedBaHeap,
                             int maxElements) {
         this.loadFactor = 0;
         if (initialCapacity < 0) {
@@ -106,19 +101,21 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
                 throw new IllegalArgumentException("Illegal load factor: " + loadFactor);
             }
             if (sharedBaHeap==null) {
-                baHeap = new ByteArrayRefHeap();
+                ByteArrayRefHeap baHeap = new ByteArrayRefHeap();
                 baHeap.setMaxMemory(newBeHeapCapacity); //730_000_000L); // 500 Mb / 1 GB
                 if (maxElements>0) {
                     // The current implementation inserts maxElements+1 and then immediately
                     // removes elements, so there is a (short) time where there is
                     // 1 more handle requested. That's why the "+1".
-                    baHeap.setMaxReferences(maxElements + 1);
+                    // 2* for testing only
+                    baHeap.setMaxReferences(2*maxElements + 1);
                 }
                 else {
                     int expectedReferences = (int) (initialCapacity*loadFactor+1);
                     baHeap.setMaxReferences(expectedReferences);
                 }
                 baHeap.initialize();
+                this.baHeap = baHeap;
             } else
                 baHeap = sharedBaHeap;
         }
@@ -128,7 +125,9 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
     }
 
     public interface ShouldRemove {
-        boolean remove(byte[] data);
+        // Key is only given if data == null.
+        // If can be recomputed by user from data.
+        boolean remove(byte[] key, byte[] data);
     }
 
     public ByteArrayHashMap(int initialCapacity, BAKeyValueRelation BAKeyValueRelation) {
@@ -177,23 +176,43 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         return this.size == 0;
     }
 
-    ByteArrayRefHeap baHeap;
+    AbstractByteArrayRefHeap baHeap;
 
-    public int getPriority(Object key) {
-        int e = this.getNode(hash(key), key);
-        if (e!=-1) {
-            byte[] metadata =baHeap.retrieveMetadata(e);
-            int priority = ObjectIO.getInt(metadata,0);
-            return priority;
-        } else
-            return -1;
+
+    // The bit used is bit 30.
+    // All negatives are invalid (except empty constant which is 0x7fffffff)
+    // Therefore only 30 bits are available for handles (1 billion handles).
+
+    final static int valueHandleBitMask = 0x40000000;
+    final static int valueHandleMask = valueHandleBitMask-1;
+
+    public int maskHandle(int p) {
+        return (p & valueHandleMask);
+    }
+
+    public int setNonValueHandle(int p) {
+        return (p | valueHandleBitMask);
+    }
+
+
+    public boolean isValueHandle(int p) {
+        return ((p & valueHandleBitMask)==0);
+    }
+    public void refreshedHandle(int p) {
+
     }
 
     public byte[] get(Object key) {
-        int e = this.getNode(hash(key), key);
-        if (e!=-1) {
-            byte[] data =baHeap.retrieveData(e);
-            this.afterNodeAccess(data);
+        int p = this.getNode(hash(key), key);
+
+        if (p!=-1) {
+            refreshedHandle(p);
+            byte[] data;
+            if (!isValueHandle(p))
+                data =null;
+            else
+                data =baHeap.retrieveData(p);
+            this.afterNodeAccess(p,data);
             return data;
         } else
             return null;
@@ -201,17 +220,25 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
 
     // Returns a handle or -1 if no node was found (it does not return empty)
     final int getNode(int hash, Object key) {
-
+        if (table==null)
+            return -1;
         int n = table.length;
         if (this.table==null) return -1;
         int idx = (n - 1) & hash;
         int first  = table[idx];
         do {
             if (first == empty) return -1;
-            byte[] data = baHeap.retrieveData(first);
-            ByteArrayWrapper aKey = computeKey(data);
-            if (aKey.equals(key))
-                return first;
+            if (!isValueHandle(first)) {
+                byte[] keyBytes = baHeap.retrieveData(maskHandle(first));
+                if (ByteUtil.fastEquals(keyBytes, ((ByteArrayWrapper)key).getData() )) {
+                    return first;
+                }
+            } else {
+                byte[] data = baHeap.retrieveData(first);
+                ByteArrayWrapper aKey = computeKey(data);
+                if (aKey.equals(key))
+                    return first;
+            }
             idx = (idx+1) & (n-1);
         } while (table[idx]!=empty);
         return -1;
@@ -231,12 +258,35 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         return this.putVal(hash(key), key, value, false, true);
     }
 
-    byte[] getPriorityAsMetadata() {
-        if (maxElements==0)
-            return null;
-        byte[] m = new byte[4];
-        ObjectIO.putInt(m,0,currentPriority++);
-        return m;
+
+    final void setItemInTable(int i,int hash,byte[] key,byte[] data,byte[] metadata,boolean evict) {
+        int handle ;
+        if (table[i]!=empty) {
+            baHeap.remove(maskHandle(table[i]));
+            table[i] = empty;
+        } else
+            this.size++;
+
+        if (data==null) {
+            handle = baHeap.add(key, metadata);
+            table[i] = setNonValueHandle(handle);
+        }   else {
+            handle = baHeap.add(data, metadata);
+            table[i] = handle;
+        }
+        if (handle==debugHandle)
+            handle = handle;
+        if (i==debugIndex) {
+            i = i;
+            int tabp = (table.length - 1) & hash;
+            tabp = tabp;
+        }
+
+        this.afterNodeInsertion(table[i],key,data,evict);
+    }
+
+    byte[] getNewMetadata() {
+        return null;
     }
 
     final byte[] putVal(int hash, ByteArrayWrapper key, byte[] value, boolean onlyIfAbsent, boolean evict) {
@@ -245,6 +295,7 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
             this.resize();
             n = table.length;
         }
+
         byte[] oldValue = null;
         int p;
         int i = n - 1 & hash;
@@ -252,38 +303,96 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         do {
             p = table[i];
             if (p == empty) {
-                table[i] = baHeap.add(value,getPriorityAsMetadata());
+                setItemInTable(i,hash,key.getData(),value, getNewMetadata(),evict);
                 break;
             }
-            oldValue =baHeap.retrieveData(p);
-            if (Arrays.equals(oldValue,value)) {
-                return oldValue;
+
+            if (!isValueHandle(p)) {
+                // The previous value was a null
+                oldValue = null;
+                byte[] keyBytes = baHeap.retrieveData(maskHandle(p));
+                if (ByteUtil.fastEquals(keyBytes, ((ByteArrayWrapper)key).getData() )) {
+                    // Key matches
+                    if (value==null)  {
+                        // the existing value is associated with null, and also the new value
+                        return null;
+                    }
+                    if (!evict) {
+                        // The value (null) already exists
+                        return null;
+                    }
+
+
+                    // replace a null value by a non-null value
+                    // Do not increase this.size.
+                    setItemInTable(i,hash,key.getData(),value, getNewMetadata(),evict);
+                    break;
+                }
+            } else {
+                oldValue =baHeap.retrieveData(p);
+                if (value==null) {
+                    // replacing a value with null?
+                    // I think this case never happens. Why would the value be null?
+
+                    // we must compare keys
+                    ByteArrayWrapper oldKey = computeKey(oldValue);
+
+                    if (oldKey.equals(key)) {
+                        if (!evict)
+                            return oldValue;
+
+                        // replace
+                        setItemInTable(i,hash,key.getData(), null, getNewMetadata(),evict);
+                        break;
+                    }
+                } else {
+                    // replacing a non-null value with a non-null value
+                    // this is the same as comparing the key, because the keys depends on the data.
+                    // The advantage of comparing the data is that we don't need to recompute the key
+                    // for element oldValue.
+                    if (Arrays.equals(oldValue, value)) {
+                        if (!evict)
+                            return oldValue;
+
+                        // It the keys depend on values, there is no point in replacing
+                        // the value by itlself (unless to increase the priority
+                        // specified in the metadata).
+                        // Anyway, do not increase the size.
+                        setItemInTable(i, hash,key.getData(), value, getNewMetadata(),evict);
+                        break;
+                    }
+                }
             }
             i = (i + 1) & (n - 1);
         } while (true);
 
-        if (++this.size > this.threshold) {
+        if (this.size > this.threshold) {
             this.resize();
         }
 
-        this.afterNodeInsertion(value,evict);
+
         return oldValue;
     }
 
-    final int subMapInitialCapacity = 6;
 
     public void removeOnCondition(ShouldRemove  rem,boolean notifyRemoval) {
         int tabLen = table.length;
         for (int j = 0; j < tabLen; ++j) {
             int p = table[j];
             if (p != empty) {
-                byte[] data =baHeap.retrieveData(p);
-                if (rem.remove(data)) {
+                byte[] key = null;
+                byte[] data = null;
+                if (!isValueHandle(p)) {
+                    key = baHeap.retrieveData(maskHandle(p));
+                    } else {
+                    data = baHeap.retrieveData(p);
+                }
+                if (rem.remove(key,data)) {
                     table[j] = empty;
                     size--;
 
                     if (notifyRemoval)
-                        this.afterNodeRemoval(data,null);
+                        this.afterNodeRemoval(key, data, null);
                 }
             }
         }
@@ -326,7 +435,15 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
             for(int j = 0; j < oldCap; ++j) {
                 int  p= oldTab[j];
                 if (p != empty) {
-                    ByteArrayWrapper k = computeKey(baHeap.retrieveData(p));
+                    byte[] key;
+                    ByteArrayWrapper k;
+                    if (!isValueHandle(p)) {
+                        key = baHeap.retrieveData(maskHandle(p));
+                        k = new ByteArrayWrapper(key);
+                    } else {
+                        byte[] data = baHeap.retrieveData(p);
+                        k = computeKey(data);
+                    }
                     int hc = hash(k);
                     addToTable(newTab, newCap, hc, p);
                 }
@@ -354,8 +471,20 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
 
     public byte[] remove(Object key) {
         int e;
-        return (e = this.removeNode(hash(key), key)) == -1 ? null : (byte[]) baHeap.retrieveData(e);
+        e = this.removeNode(hash(key), key);
+
+        if (e==-1) {
+            return null;
+        }
+
+        if (!isValueHandle(e)) {
+            return null;
+        }
+        return baHeap.retrieveData(e);
     }
+
+    int debugHandle = 954396;
+    int debugIndex = 1;
 
     final int  removeNode(int hash, Object key) {
 
@@ -365,33 +494,57 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         if (this.table == null) return -1;
         n = table.length;
         if (n == 0) return -1;
-        byte[] data = null;
+        byte[] exdata = null;
+        byte[] exkey = null;
+        int counter =0;
+        index = (n - 1) & hash;
         do {
-            index = n - 1 & hash;
+            counter++;
+
+            exkey = null;
+            exdata = null;
+
+            if (counter % 100_000==0) {
+                System.out.println("scanning table index: "+index+" counter "+counter);
+            }
             p = table[index];
             if (p == empty) {
                 return -1;
             }
-            data =baHeap.retrieveData(p);
-            ByteArrayWrapper exKey = computeKey(data);
-            if (exKey.equals(key)) {
-                table[index] = empty;
-                fillGap(index,n);
-                break;
+            if (!isValueHandle(p)) {
+                exkey =baHeap.retrieveData(maskHandle(p));
+                if (ByteUtil.fastEquals(exkey, ((ByteArrayWrapper)key).getData() )) {
+                    table[index] = empty;
+                    fillGap(index,n);
+                    break;
+                }
+            } else {
+                if (p==debugHandle)
+                    p = p;
+                exdata = baHeap.retrieveData(p);
+                ByteArrayWrapper exKeyBA = computeKey(exdata);
+                if (exKeyBA.equals(key)) {
+                    exkey = exKeyBA.getData();
+                    table[index] = empty;
+                    if ((index==1) || (index==0))
+                        index = index;
+                    baHeap.remove(p);
+                    fillGap(index, n);
+                    break;
+                }
             }
             index = (index + 1) & (n - 1);
         } while (true);
 
         --this.size;
 
-        this.afterNodeRemoval(data,getOptionalMetadata(p) );
+        this.afterNodeRemoval(exkey,exdata,getOptionalMetadata(p) );
         return p;
     }
 
     public byte[] getOptionalMetadata(int handle)  {
+        // We don't use metadata in this class, child classes may use it
         byte[] metadata = null;
-        if (maxElements>0)
-            metadata = baHeap.retrieveMetadata(handle);
         return metadata;
     }
 
@@ -488,11 +641,17 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
                 int tabLen = table.length;
 
                 for (int i = 0; i < tabLen; ++i) {
-                    if (table[i] == empty)
+                    int p =table[i];
+                    if (p== empty)
                         continue;
-                    byte[] data = baHeap.retrieveData(table[i]);
-                    ByteArrayWrapper aKey = computeKey(data);
-                    action.accept(aKey, (byte[]) data);
+                    if (!isValueHandle(p)) {
+                        byte[] key =    baHeap.retrieveData(maskHandle(p));
+                        action.accept(new ByteArrayWrapper(key), null);
+                    } else {
+                        byte[] data = baHeap.retrieveData(p);
+                        ByteArrayWrapper aKey = computeKey(data);
+                        action.accept(aKey, (byte[]) data);
+                    }
                 }
 
                 if (this.modCount != mc) {
@@ -580,94 +739,19 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         this.size = 0;
     }
 
-    void afterNodeAccess(byte[] p) {
+    void afterNodeAccess(int markedHandle, byte[] p) {
     }
 
 
     void beforeNodeInsertion() {
 
     }
-    void afterNodeInsertion(byte[] p, boolean evict) {
 
-        if (maxElements==0) return;
-        // If priority reaches the maximum integer, we must re-prioritize all elements
-        // to make space for higher priorities.
-        // maxElements must be lower than Integer.MAX_VALUE to avoid
-        // reprioritizing frequently.
-        // But it it is one bit lower (less than half) it's enough, since reprioritizations
-        // will happen every 2^30 insertions.
-        // Here we let the maximum be variable to be able to test the reprizitization code
-        // without too many insertions
-        if (currentPriority==MaxPriority)
-            reprioritize();
-        if (!evict) return;
+    void afterNodeInsertion(int markedHandle,byte[] key, byte[] data, boolean evict) {
 
-
-        if (removeInBulk) {
-            if (size()<=maxElements) return;
-            // if there is no slot left, remove lower priorities
-            // because we need always at least one slot free.
-            int divisor = 10;
-            int increment = (currentPriority - minPriority) / divisor;
-            if (increment==0)
-                increment = 1;
-
-            minPriority = minPriority + increment;
-            if (logEvents)
-                System.out.println("Start removing elements below priority "+minPriority+"...");
-
-            checkHeap();
-            int priorSize = size;
-            baHeap.beginRemap();
-            removeLowerPriorityElements(0,table.length,false, true);
-            baHeap.endRemap();
-            if (logEvents)
-                System.out.println("Stop removing elements ("+(priorSize-size)+" elements removed)");
-            checkHeap();
-        } else {
-            int divisor = 10;
-            // This is a flexible removal policy. Instead of removing all element with priority below
-            // minPriority, we scan only 10% of our table. If we find elements to remove, then we do.
-            // When we reach 90% of usage, we start removing 1% for each 1% added.
-            int maxReducedElements =maxElements*(divisor-1)/divisor;
-            if (size()<=maxReducedElements*(divisor+1)/divisor) return;
-            minPriority = minPriority + (size() - maxReducedElements) / divisor;
-            int prevSize = size();
-
-            startScanForRemoval = removeLowerPriorityElements(startScanForRemoval,table.length/divisor,false, false);
-            //System.out.println("removed "+(prevSize-size) + " = "+(prevSize-size)*100/prevSize+"%");
-            if (size()<prevSize)  {
-                if (baHeap.heapIsAlmostFull())
-                    compressHeap();
-            }
-        }
     }
 
-    void reprioritize() {
-        if (logEvents)
-            System.out.println("Reprioritizing");
-        int count = table.length;
-        for (int c = 0; c < count; ++c) {
-            int p = table[c];
-            if (p != empty) {
-                byte[] metadata = baHeap.retrieveMetadata(p);
-                int priority = ObjectIO.getInt(metadata,0);
-                if (priority<minPriority)
-                    priority =0;
-                else
-                    priority -=minPriority;
-                ObjectIO.putInt(metadata,0,priority);
-                baHeap.setMetadata(p,metadata);
-            }
 
-        }
-        currentPriority -=minPriority;
-        minPriority =0;
-        if (logEvents) {
-            System.out.println("after reprio");
-            //dumpTable();
-        }
-    }
 
 
     public List<TableItem> exportTable() {
@@ -683,18 +767,29 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         return export;
     }
 
+    public void fillTableItem(TableItem ti) {
+
+    }
+
     public TableItem getTableItem(int c) {
         TableItem ti = new TableItem();
         ti.handle = table[c];
-        ti.data = baHeap.retrieveData(ti.handle);
-        ti.metadata = baHeap.retrieveMetadata(ti.handle);
-        ti.priority = ObjectIO.getInt(ti.metadata,0);
-        ti.key = computeKey(ti.data);
+        if (isValueHandle(ti.handle)) {
+            ti.data = baHeap.retrieveData(ti.handle);
+            ti.key = computeKey(ti.data);
+        } else {
+            ti.key =new ByteArrayWrapper(baHeap.retrieveData(maskHandle(ti.handle)));
+            ti.data = null;
+        }
+        ti.metadata = baHeap.retrieveMetadata(maskHandle(ti.handle));
+
+        fillTableItem(ti);
+
         ti.dataHash = hash(ti.key) ;
         ti.bucket = ti.dataHash & (table.length-1);
         return ti;
-
     }
+
     public void dumpTable() {
         int count = table.length;
         for (int c = 0; c < count; ++c) {
@@ -739,62 +834,11 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         System.out.println("Usage after: "+ baHeap.getUsagePercent());
     }
 
-    void afterNodeRemoval(byte[] p,byte[] metadata) {
-        if (maxElements==0) return;
-        if (metadata==null) return;
+    void afterNodeRemoval(byte[] key,byte[] data,byte[] metadata) {
 
-        int priority = ObjectIO.getInt(metadata,0);
-        if (priority==minPriority)
-            minPriority = minPriority+1;
     }
 
-    // This method performs a scan over all elements and remove all below a certain
-    // limit.
-    public int removeLowerPriorityElements(int from,int count, boolean notifyRemoval,boolean doremap) {
-        int j = from;
-        int mask = table.length-1;
-        int boundary = (from+count) & mask;
-        for (int c = 0; c < count; ++c) {
-            int p = table[j];
-            if (j==69)
-                j =j;
-            if (p != empty) {
-                byte[] metadata =baHeap.retrieveMetadata(p);
-                int priority = ObjectIO.getInt(metadata,0);
 
-                if (priority<minPriority) {
-                    // If an item is removed, then it must continue with the same index
-                    // because another item may have take its place
-                    // It is possible that removeItem brings back into scope a handle
-                    // that was previously marked for remap.
-                    // Example: element 0 is marked, when element (n-1) is removed, element
-                    // 0 is moved to position (n-1) and therefore it is analyzed again
-                    boolean movedElementAcrossBoundary = removeItem(j,boundary);
-                    if (movedElementAcrossBoundary)
-                        j =j;
-                    if (notifyRemoval) {
-                        byte[] data = baHeap.retrieveData(p);
-                        this.afterNodeRemoval(data, metadata);
-                    }
-                    // If an element was moved to replace the one removed
-                    if ((table[j]!=empty) && (!movedElementAcrossBoundary)) {
-                        // This wraps-around zero correctly in Java.
-                        // The previous value of 0 is mask.
-                        j = (j - 1) & mask;
-                        c--;
-                    }
-
-                } else
-                    if (doremap) {
-                        // Note: some elements in the wrap-around boundary [(from+count-1)..from]
-                        // May be marked two times for remap.
-                        baHeap.remap(p);
-                    }
-            }
-            j = (j+1) & mask;
-        }
-        return j;
-    }
 
     boolean removeItem(int j,int boundary) {
         table[j] = empty;
@@ -802,31 +846,58 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         return fillGap(j,boundary);
     }
 
-    // Returns true if the element used to fill had an index equal or higher than
+    // This method will try to fill the empty slot j.
+    // Returns true if the element used to fill the empty slot j was at an index equal or higher than
     // the one given by argument boundary.
     boolean fillGap(int j,int boundary) {
         int i = j;
+        boundary = boundary % table.length;
         boolean crossedBoundary = false;
+        boolean wrapAroundZero = false;
         int n = table.length;
         do {
             i = (i + 1) & (n- 1);
             if (i==boundary)
                 crossedBoundary = true;
+            if (i==0)
+                wrapAroundZero = true;
             int h = table[i];
             if (h == empty)
                 return false;
-            byte[] data = baHeap.retrieveData(h);
-            ByteArrayWrapper key = computeKey(data);
-            int dataHash = hash(key) ;
-            int index = dataHash & (n - 1);
-            if (index <= j) { // can move
+            ByteArrayWrapper key;
+            if (!isValueHandle(h)) {
+                byte[] keyBytes =  baHeap.retrieveData(maskHandle(h));
+                key = new ByteArrayWrapper(keyBytes);
+            } else {
+                byte[] data = baHeap.retrieveData(h);
+                key = computeKey(data);
+            }
+            int keyHash = hash(key) ;
+            int index = keyHash & (n - 1);
+
+            boolean move = false;
+
+            if (index==j)
+                move = true;
+            else
+                if (index<j) {
+                    if (wrapAroundZero)
+                        move = (index>i);
+                    else
+                        move = true;
+                }
+
+            if (move) {
                 table[j] = table[i];
+                if ((j==1) || (i==1) || (i==0) || (j==0))
+                    j = j;
                 table[i] = empty;
                 crossedBoundary |=fillGap(i,boundary);
                 return crossedBoundary;
             }
         } while (true);
     }
+
 
     void internalWriteEntries(ObjectOutputStream s) throws IOException {
 
@@ -836,6 +907,11 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
             for(int i = 0; i < tabLen; ++i) {
                 if (table[i]!=empty) {
                     int p =table[i];
+                    if (!isValueHandle(p)) {
+                        // This is not supported, because we should write the key and flag somehow that
+                        // this is not a data entry, but a key entry. TO DO
+                        throw new RuntimeException("null entries not supported");
+                    }
                     byte[] data = baHeap.retrieveData(p);
                     //s.writeObject(computeKey(data));
                     s.writeObject(data);
@@ -855,9 +931,14 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
 
                 int tabLen = table.length;
                 for (int i = 0; i < tabLen; ++i) {
-                    if (table[i]!=empty) {
-                        byte[] data = baHeap.retrieveData(table[i]);
-                        action.accept(data);
+                    int p =table[i];
+                    if (p!=empty) {
+                        if (!isValueHandle(p)) {
+                           // Does it make sense to accept a null? Probably not
+                        } else {
+                            byte[] data = baHeap.retrieveData(table[i]);
+                            action.accept(data);
+                        }
 
                     }
                 }

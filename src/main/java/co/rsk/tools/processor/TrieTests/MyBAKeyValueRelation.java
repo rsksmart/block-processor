@@ -4,7 +4,7 @@ import co.rsk.tools.processor.TrieTests.Unitrie.store.ByteArrayHashMap;
 import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.db.ByteArrayWrapper;
 
-class MyBAKeyValueRelation implements ByteArrayHashMap.BAKeyValueRelation {
+public class MyBAKeyValueRelation implements ByteArrayHashMap.BAKeyValueRelation {
     public int intFromBytes(byte b1, byte b2, byte b3, byte b4) {
         return b1 << 24 | (b2 & 0xFF) << 16 | (b3 & 0xFF) << 8 | (b4 & 0xFF);
     }
@@ -23,7 +23,7 @@ class MyBAKeyValueRelation implements ByteArrayHashMap.BAKeyValueRelation {
     public ByteArrayWrapper getKeyFromData(byte[] data) {
         return new ByteArrayWrapper(Keccak256Helper.keccak256(data));
     }
-
+/*
     @Override
     public long getPriority(byte[] data) {
         return 0;
@@ -43,4 +43,6 @@ class MyBAKeyValueRelation implements ByteArrayHashMap.BAKeyValueRelation {
     public void afterNodeRemoval(long priority) {
 
     }
+
+ */
 }

@@ -37,8 +37,12 @@ public class CompareTries extends Benchmark {
     // Cost of read is 200 right now in RSK.
     final int readsPerBlock = 34000;
 
-
-    boolean useCACache = false;
+    enum HashMapDataStructure {
+        MaxSizeHashMap,
+        MaxSizeCAHashMap,
+        MaxSizeByteArrayHashMap
+    }
+    HashMapDataStructure hashMapDataStructure =  HashMapDataStructure.MaxSizeHashMap; // HashMapDataStructure.MaxSizeByteArrayHashMap;
 
     long max =  4096; //32L*(1<<20);// 8 Million nodes // 1_000_000;
     EncodedObjectStore ms;
@@ -97,6 +101,8 @@ public class CompareTries extends Benchmark {
        log("TrieDB size: "+getFolderSize(new File(trieDBFolder.toString()))) ;
     }
 
+    KeyValueDataSource dsWithCache;
+
     // This emulares rskj store building
     protected TrieStore buildTrieStore(Path trieStorePath) {
         int statesCacheSize;
@@ -118,12 +124,18 @@ public class CompareTries extends Benchmark {
 
         // in rskj flushNumberOfBlocks is 1000, so we should flush automatically every 1000
         // blocks
-        if (useCACache)
+        if (hashMapDataStructure==HashMapDataStructure.MaxSizeCAHashMap)
             ds = new DataSourceWithCACache(ds, statesCacheSize, null);
         else
-           ds = new DataSourceWithCache(ds, statesCacheSize, null);
+            if (hashMapDataStructure==HashMapDataStructure.MaxSizeHashMap)
+                 ds = new DataSourceWithCache(ds, statesCacheSize, null);
+            else
+            if (hashMapDataStructure==HashMapDataStructure.MaxSizeByteArrayHashMap)
+            {
+                ds = new DataSourceWithBACache(ds, statesCacheSize, null);
+            }
 
-
+        dsWithCache = ds;
         return (TrieStore) new TrieStoreImpl(ds);
     }
 
@@ -292,7 +304,7 @@ public class CompareTries extends Benchmark {
     }
     Path trieDBFolder =Path.of("./triestore/state");
 
-        public void createOrAppendToRootNode() {
+    public void createOrAppendToRootNode() {
         if (rootNode ==null) {
             rootNode = new Trie(getTrieStore());
             leafNodeCounter =0;
@@ -300,6 +312,7 @@ public class CompareTries extends Benchmark {
     }
 
     public void buildByInsertion() {
+        log("buildByInsertion max="+max);
         maxKeysTopDown = max;
         prepare();
 
@@ -540,6 +553,7 @@ public class CompareTries extends Benchmark {
 
 
     public void buildbottomUp() {
+        log("buildbottomUp max="+max);
         maxKeysBottomUp = max;
         prepare();
         // The idea is that we create the terminal nodes, then we pair them up
@@ -727,21 +741,6 @@ public class CompareTries extends Benchmark {
     }
 
 
-    enum DataStructure {
-        CAHashMap,
-        HashMap,
-        LinkedHashMap,
-        LinkedCAHashMap,
-        NumberedCAHashMap,
-        MaxSizeHashMap,
-        MaxSizeCAHashMap,
-        ByteArrayHashMap,
-        MaxSizeByteArrayHashMap
-
-    }
-
-
-
     public void createLogFile(String basename,String expectedItems) {
             String name = "Results/"+basename;
             name=name+"-"+TrieKeySliceFactoryInstance.get().getClass().getSimpleName();
@@ -754,10 +753,7 @@ public class CompareTries extends Benchmark {
             name = name + "-"+expectedItems;
             name = name + "-" + testMode.toString();
             name = name +"-Max_"+ getMillions( Runtime.getRuntime().maxMemory());
-            if (useCACache)
-                name = name +"-CAC";
-            else
-                name = name +"-C";
+            name = name +"-"+hashMapDataStructure.toString();
 
             Date date = Calendar.getInstance().getTime();
             DateFormat dateFormat = new SimpleDateFormat("yyyy-mm-dd hh.mm.ss");
@@ -834,10 +830,8 @@ public class CompareTries extends Benchmark {
         log("TrieKeySliceFactory classname: "+TrieKeySliceFactoryInstance.get().getClass().getName());
         GlobalEncodedObjectStore.get();
 
-        if (useCACache)
-            log("Using new DataSourceWithCACache");
-        else
-            log("Using old DataSourceWithCache");
+        log("Using hashmap: "+hashMapDataStructure.toString());
+        log("Using DataSourceWithCache class: "+dsWithCache.getClass().getName());
 
         if (GlobalEncodedObjectStore.get()==null)
             log("ObjectMapper not present");
@@ -857,7 +851,7 @@ public class CompareTries extends Benchmark {
         //testMode = TestMode.testERC20LongBalances;
         testMode = StateTrieSimulator.SimMode.simEOAs;
         long addMaxKeysBottomUp  = 1L * (1 << 20);
-        long addMaxKeysTopDown = 1L * (1 << 20);
+        long addMaxKeysTopDown = 1L * (1 << 20)/2; // total: 1.5M
         boolean testExistentKeys = false;
 
         if (testExistentKeys) {
@@ -879,11 +873,9 @@ public class CompareTries extends Benchmark {
             encodedObjectStore.setMaxMemory(memoryForStoreMegabytes * 1000L * 1000L);
             encodedObjectStore.initialize();
         }
+        getTrieStore();
         createLogFile("swtest",maxStr);
         logGlobalClasses();
-
-
-
 
         if (addMaxKeysBottomUp >0) {
             // Create a high number of accounts bottom-up

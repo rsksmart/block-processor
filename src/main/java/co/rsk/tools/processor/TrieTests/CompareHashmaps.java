@@ -1,5 +1,7 @@
 package co.rsk.tools.processor.TrieTests;
 
+import co.rsk.tools.processor.TrieTests.Unitrie.LinkedByteArrayRefHeap;
+import co.rsk.tools.processor.TrieTests.Unitrie.SimpleByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
 import co.rsk.util.MaxSizeHashMap;
 import org.ethereum.db.ByteArrayWrapper;
@@ -8,6 +10,7 @@ import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public class CompareHashmaps extends Benchmark {
 
@@ -37,7 +40,9 @@ public class CompareHashmaps extends Benchmark {
         // This is the hashmap that we're going to test. You can
         // find all hashmaps data structures that are being tested
         // in the DataStructure enum.
-        CompareTries.DataStructure testDS = CompareTries.DataStructure.MaxSizeByteArrayHashMap;
+        DataStructure testDS;
+        //testDS= DataStructure.MaxSizeLinkedByteArrayHashMap; //MaxSizeByteArrayHashMap;
+        testDS = DataStructure.MaxSizeHashMap;
 
         CAHashMap<ByteArrayWrapper, byte[]> camap =null;
         AbstractMap<ByteArrayWrapper, byte[]> map=null;
@@ -49,46 +54,62 @@ public class CompareHashmaps extends Benchmark {
         String testClass ="";
 
         switch (testDS) {
-            case    MaxSizeHashMap:
+            case MaxSizeHashMap:
             case MaxSizeCAHashMap:
-            case    MaxSizeByteArrayHashMap:
-                maxSize = vmax;//+1; //8_000_000;
+            case MaxSizeByteArrayHashMap:
+            case PrioritizedByteArrayHashMap:
+            case MaxSizeLinkedByteArrayHashMap:
+                maxSize = 1_000_000; // vmax;//+1; //8_000_000;
         }
 
         int initialSize = (int) (maxSize/loadFActor);
 
         start(true);
-        if (testDS== CompareTries.DataStructure.CAHashMap) {
+        if (testDS== DataStructure.CAHashMap) {
             camap = new CAHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor, myKeyValueRelation);
             map = camap;
         } else
-        if (testDS== CompareTries.DataStructure.LinkedHashMap) {
+        if (testDS== DataStructure.LinkedHashMap) {
             map =  new LinkedHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor);
         } else
-        if (testDS== CompareTries.DataStructure.HashMap) {
+        if (testDS== DataStructure.HashMap) {
             map =  new HashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFActor);
         } else
-        if (testDS== CompareTries.DataStructure.NumberedCAHashMap) {
+        if (testDS== DataStructure.NumberedCAHashMap) {
             TSNodeCACacheRelation myTSKeyValueRelation = new TSNodeCACacheRelation(0);
             tsmap = new CAHashMap<ByteArrayWrapper, TSNode>((int) initialSize, loadFActor, myTSKeyValueRelation);
             map = camap;
         } else
-        if (testDS== CompareTries.DataStructure.MaxSizeCAHashMap) {
+        if (testDS== DataStructure.MaxSizeCAHashMap) {
             TSNodeCACacheRelation myTSKeyValueRelation = new TSNodeCACacheRelation(maxSize);
             tsmap = new MaxSizeCAHashMap<ByteArrayWrapper, TSNode>((int) initialSize, loadFActor, myTSKeyValueRelation);
             map = camap;
         } else
-        if (testDS== CompareTries.DataStructure.MaxSizeHashMap) {
+        if (testDS== DataStructure.MaxSizeHashMap) {
             map =  new MaxSizeHashMap<>(maxSize, true);
         } else
-        if (testDS== CompareTries.DataStructure.ByteArrayHashMap)  {
+        if (testDS== DataStructure.ByteArrayHashMap)  {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             int avgElementSize =88;
             long beHeapCapacity =(long) vmax*avgElementSize*11/10;
             map =  new ByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,0 );
         }
         else
-        if (testDS== CompareTries.DataStructure.MaxSizeByteArrayHashMap) {
+        if (testDS== DataStructure.MaxSizeByteArrayHashMap) {
+            MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
+            SimpleByteArrayRefHeap sharedBaHeap = new SimpleByteArrayRefHeap(maxSize,8);
+            MaxSizeByteArrayHashMap pmap =  new MaxSizeByteArrayHashMap(initialSize,loadFActor,myKR,0,sharedBaHeap,
+                    maxSize );
+            map = pmap;
+        } else
+        if (testDS== DataStructure.MaxSizeLinkedByteArrayHashMap) {
+            MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
+            LinkedByteArrayRefHeap sharedBaHeap = new LinkedByteArrayRefHeap(maxSize,8);
+            MaxSizeLinkedByteArrayHashMap pmap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFActor,myKR,0,sharedBaHeap,
+                    maxSize );
+            map = pmap;
+        } else
+        if (testDS== DataStructure.PrioritizedByteArrayHashMap) {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             int avgElementSize =88;
             long beHeapCapacity;
@@ -98,9 +119,9 @@ public class CompareHashmaps extends Benchmark {
             else
                 beHeapCapacity =(long) maxSize*avgElementSize*14/10;
 
-            ByteArrayHashMap bamap =  new ByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,maxSize );
-            bamap.removeInBulk = removeInBulk;
-            map = bamap;
+            PrioritizedByteArrayHashMap pmap =  new PrioritizedByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,maxSize );
+            pmap.removeInBulk = removeInBulk;
+            map = pmap;
         }
         if (tsmap!=null)
             testClass = tsmap.getClass().getName();
@@ -169,7 +190,7 @@ public class CompareHashmaps extends Benchmark {
 
 
 
-        System.out.println("Testing scanning speed (for GC)");
+        System.out.println("Testing scanning and retrieving (key,data) speed");
         start(false);
         int[] counter  = new int[1];
         if (tsmap!=null) {
@@ -182,7 +203,22 @@ public class CompareHashmaps extends Benchmark {
         stop(false);
         System.out.println("Counter: "+counter[0]);
 
-        dumpSpeedResults(vmax);
+        dumpSpeedResults(maxSize);
+
+        System.out.println("Testing scanning and retrieving (data) only..");
+        if ((map!=null) && (map instanceof  ByteArrayHashMap)) {
+            start(false);
+            int[] counter2 = new int[1];
+
+            Consumer<byte[]> count = (d) -> counter2[0]++;
+            ((ByteArrayHashMap) map).forEach(count);
+
+            stop(false);
+            System.out.println("Counter2: " + counter2[0]);
+            dumpSpeedResults(maxSize);
+        }
+
+
 
     }
 
@@ -191,5 +227,19 @@ public class CompareHashmaps extends Benchmark {
         c.testHashmapReplacement();
 
         System.exit(0);
+    }
+
+    enum DataStructure {
+        CAHashMap,
+        HashMap,
+        LinkedHashMap,
+        LinkedCAHashMap,
+        NumberedCAHashMap,
+        MaxSizeHashMap,
+        MaxSizeCAHashMap,
+        ByteArrayHashMap,
+        PrioritizedByteArrayHashMap,
+        MaxSizeByteArrayHashMap,
+        MaxSizeLinkedByteArrayHashMap
     }
 }

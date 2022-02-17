@@ -2,13 +2,8 @@ package co.rsk.tools.processor.TrieTests.Unitrie;
 
 import co.rsk.tools.processor.TrieTests.oheap.HeapFileDesc;
 import co.rsk.tools.processor.TrieTests.oheap.Space;
-import net.mintern.primitive.Primitive;
-import net.mintern.primitive.comparators.IntComparator;
-import org.ethereum.util.ByteUtil;
-
 import java.util.ArrayList;
 import java.util.BitSet;
-import java.util.Comparator;
 import java.util.List;
 
 
@@ -23,8 +18,8 @@ public class ByteArrayHeapBase {
     public static int default_remapThreshold = 95;
 
     public static boolean debugCheckAll = false;
-    public static boolean debugLogInfo = false;
-    public static boolean logOperations = false;
+    public static boolean debugLogInfo = true;
+    public static boolean logOperations = true;
 
     public final int remapThreshold;
 
