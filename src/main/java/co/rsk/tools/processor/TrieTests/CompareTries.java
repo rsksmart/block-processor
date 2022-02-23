@@ -1,6 +1,5 @@
 package co.rsk.tools.processor.TrieTests;
 
-//import co.rsk.tools.processor.TrieTests.sepAttempt.InMemTrie;
 
 import co.rsk.core.types.ints.Uint24;
 import co.rsk.crypto.Keccak256;
@@ -18,6 +17,7 @@ import org.ethereum.datasource.LevelDbDataSource;
 import org.ethereum.util.ByteUtil;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -27,6 +27,21 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 public class CompareTries extends Benchmark {
+    enum HashMapDataStructure {
+        NoCache,
+        MaxSizeHashMap,
+        MaxSizeCAHashMap,
+        MaxSizeByteArrayHashMap,
+        MaxSizeLinkedByteArrayHashMap
+    }
+
+    HashMapDataStructure hashMapDataStructure =
+    //        HashMapDataStructure.NoCache;
+            HashMapDataStructure.MaxSizeHashMap;
+    //HashMapDataStructure.MaxSizeLinkedByteArrayHashMap;
+    // HashMapDataStructure.MaxSizeByteArrayHashMap;
+
+
     final int flushNumberOfBlocks =1000;
     // Each write to store takes 20K gas, which means that each block with 6.8M gas
     // can perform 340 writes.
@@ -37,12 +52,8 @@ public class CompareTries extends Benchmark {
     // Cost of read is 200 right now in RSK.
     final int readsPerBlock = 34000;
 
-    enum HashMapDataStructure {
-        MaxSizeHashMap,
-        MaxSizeCAHashMap,
-        MaxSizeByteArrayHashMap
-    }
-    HashMapDataStructure hashMapDataStructure =  HashMapDataStructure.MaxSizeHashMap; // HashMapDataStructure.MaxSizeByteArrayHashMap;
+    int testCacheSize = 1_000_000;
+    boolean adjustCacheSize = true;
 
     long max =  4096; //32L*(1<<20);// 8 Million nodes // 1_000_000;
     EncodedObjectStore ms;
@@ -59,7 +70,9 @@ public class CompareTries extends Benchmark {
     long randomReadsPerSecond;
     long randomExistentReadsPerSecond;
     long leafNodeCount;
+    long nodeCount;
     long scannedLeafNodesPerSecond;
+    long scannedNodesPerSecond;
     long timeToInsertElements;
     long timeToBuildTree;
     long leafNodeCounter;
@@ -101,10 +114,14 @@ public class CompareTries extends Benchmark {
        log("TrieDB size: "+getFolderSize(new File(trieDBFolder.toString()))) ;
     }
 
-    KeyValueDataSource dsWithCache;
+    DataSourceWithCacheAndStats dsWithCache;
+    long statesCacheSize;
+
+
+    KeyValueDataSource dsDB;
 
     // This emulares rskj store building
-    protected TrieStore buildTrieStore(Path trieStorePath) {
+    protected TrieStore buildTrieStore(Path trieStorePath,boolean deleteIfExists,boolean abortIfExists) {
         int statesCacheSize;
 
         if (ms!=null)
@@ -112,30 +129,67 @@ public class CompareTries extends Benchmark {
             // We give it a minimum size
             statesCacheSize = 10_000;
         else
-            statesCacheSize = 1_000_000;
-        try {
-            log("deleting previous trie db");
-            deleteDirectoryRecursion(trieStorePath.getParent());
-            dumpTrieDBFolderSize();
-        } catch (IOException e) {
-            System.out.println("Could not delete database dir");
+            statesCacheSize = testCacheSize ;
+
+        if (hashMapDataStructure==HashMapDataStructure.NoCache) {
+            statesCacheSize=0;
+        }
+        if (adjustCacheSize) {
+            // To compare apples with apples, in case we use
+            // MaxSizeLinkedByteArrayHashMap, we have to increase the cache
+            // by the ratio 216/138 = 1,565
+            int fmul = 216;
+            int fdiv = 138;
+            // Because we can store more entries consuming the same memory.
+            if (hashMapDataStructure == HashMapDataStructure.MaxSizeLinkedByteArrayHashMap)
+                statesCacheSize = statesCacheSize * fmul / fdiv;
+        }
+
+        log("Database: "+trieStorePath.toAbsolutePath());
+        if (abortIfExists) {
+            if (Files.isDirectory(trieStorePath, LinkOption.NOFOLLOW_LINKS)) {
+                throw new RuntimeException("Target trie db directory exists. Remove first");
+            }
+
+        }
+        if (deleteIfExists) {
+            try {
+                log("deleting previous trie db");
+                deleteDirectoryRecursion(trieStorePath);
+                dumpTrieDBFolderSize();
+            } catch (IOException e) {
+                System.out.println("Could not delete database dir");
+            }
         }
         KeyValueDataSource ds = LevelDbDataSource.makeDataSource(trieStorePath);
-
+        dsDB = ds;
         // in rskj flushNumberOfBlocks is 1000, so we should flush automatically every 1000
         // blocks
         if (hashMapDataStructure==HashMapDataStructure.MaxSizeCAHashMap)
             ds = new DataSourceWithCACache(ds, statesCacheSize, null);
         else
             if (hashMapDataStructure==HashMapDataStructure.MaxSizeHashMap)
-                 ds = new DataSourceWithCache(ds, statesCacheSize, null);
+                 ds = new DataSourceWithCacheAndStats(ds, statesCacheSize, null);
             else
             if (hashMapDataStructure==HashMapDataStructure.MaxSizeByteArrayHashMap)
             {
                 ds = new DataSourceWithBACache(ds, statesCacheSize, null);
             }
+            else
+            if (hashMapDataStructure==HashMapDataStructure.MaxSizeLinkedByteArrayHashMap)
+            {
+                ds = new DataSourceWithLinkedBACache(ds, statesCacheSize, null);
+            } else
+            if (hashMapDataStructure==HashMapDataStructure.NoCache) {
+                ds = new DataSourceWithCacheAndStats(ds, 0, null);
 
-        dsWithCache = ds;
+            }
+        log("statesCacheSize: "+statesCacheSize);
+
+
+        dsWithCache = (DataSourceWithCacheAndStats) ds;
+        log("Datasource modifiers: "+dsWithCache.getModifiers());
+        this.statesCacheSize = statesCacheSize;
         return (TrieStore) new TrieStoreImpl(ds);
     }
 
@@ -190,10 +244,9 @@ public class CompareTries extends Benchmark {
 
     public void printMemStats(String s) {
         if (ms==null) return;
-            List<String> stats= ms.getStats();
-            for(int i=0;i<stats.size();i++) {
-                log(s + " InMemStore " + stats.get(i));
-            }
+        List<String> stats= ms.getStats();
+        logList(s + " InMemStore ",stats);
+
         if (ms!=null) {
             if (ms.supportsGarbageCollection())
                 log("-- Store percentage use: " + ms.getUsagePercent()+"%");
@@ -297,12 +350,22 @@ public class CompareTries extends Benchmark {
     }
     TrieStore trieStore;
 
-    public TrieStore getTrieStore() {
+    public void openTrieStore(boolean deleteIfExists,boolean abortIfExists,String dbName) {
+        Path trieDBFolderPlusSize = trieDBFolder;
+
+        if ((dbName!=null) && (dbName.length()>0)) {
+            if ((dbName.indexOf("..")>=0) || (dbName.indexOf("/")>=0))
+                    throw new RuntimeException("sanity check");
+            trieDBFolderPlusSize = trieDBFolder.resolve(dbName);
+        }
         if (trieStore==null)
-            trieStore = buildTrieStore(trieDBFolder);
+            trieStore = buildTrieStore(trieDBFolderPlusSize,deleteIfExists,abortIfExists);
+    }
+
+    public TrieStore getTrieStore() {
         return trieStore;
     }
-    Path trieDBFolder =Path.of("./triestore/state");
+    Path trieDBFolder =Path.of("./triestore");
 
     public void createOrAppendToRootNode() {
         if (rootNode ==null) {
@@ -322,9 +385,7 @@ public class CompareTries extends Benchmark {
 
         // If the fixed key part has already been selected by bottom up construction
         // then do not select again!
-        if (fixedKeyPart==null) {
-            fixedKeyPart = TestUtils.getPseudoRandom().randomBytes(stateTrieSim.fixKeySize);
-        }
+        computeFixedKeyPart();
         byte[] key = new byte[stateTrieSim.fixKeySize+stateTrieSim.varKeySize];
         System.arraycopy(fixedKeyPart,0,key,0,stateTrieSim.fixKeySize);
         for (long i = 0; i < max; i++) {
@@ -366,29 +427,13 @@ public class CompareTries extends Benchmark {
         // Every N writes, add one to the global clock, so elements inserted
         // get tagged with newer times
         GlobalClock.setTimestamp(GlobalClock.getTimestamp() + 1);
-        if (GlobalEncodedObjectStore.get() == null) {
-            // If there is no encoded object store, we emulate
-            // that a following block must be mined. So we must dispose the current trie
-            // and reload it from disk or any other TrieStore cache that exists.
-            Keccak256 rootNodeHash = rootNode.getHash();
-            if (sSaveTrie)
-                saveTrie();
-            rootNode = null; // make sure nothing is left
-            Optional<Trie> optRootNode = getTrieStore().retrieve(rootNodeHash.getBytes());
-            if (!optRootNode.isPresent()) {
-                System.out.println("Could not retrieve node ");
-                System.exit(1);
-            }
-            rootNode = optRootNode.get();
-        } else {
-            // If we have an encoded object store, we never throw away the root
-            // but we still have to flush things to disk
-            //El problema es que el encoded store no guarda un flag indicando si el nodo esta
-            //        en disco o no. Eso hace que siempre se regrabe
+        if (sSaveTrie)
+            saveTrie();
+        destroyTree();
+        // too much noise: log("New block");
 
-            if (sSaveTrie)
-                saveTrie();
-        }
+
+
         blocksCreated++;
         if (blocksCreated % flushNumberOfBlocks==0)
             flushTrie();
@@ -408,24 +453,33 @@ public class CompareTries extends Benchmark {
     }
 
     public void dumpResults() {
-
-        elapsedTime = (ended - started) / 1000;
+        long elapsedTimeMs = (ended - started);
+        elapsedTime = elapsedTimeMs / 1000;
         log("Elapsed time [s]: " + elapsedTime);
         if (elapsedTime!=0) {
-            log("Added nodes/sec: " + (max / elapsedTime));
-            log("Added blocks/sec: " + (blocksCreated / elapsedTime));
+            log("Added nodes/sec: " + (max *1000L/ elapsedTimeMs));
+            log("Added blocks/sec: " + (blocksCreated*1000L / elapsedTimeMs));
             if (blocksCreated>0)
-                log("Avg processing time/block [msec]: " +  (ended - started)/blocksCreated);
+                log("Avg processing time/block [msec]: " +  elapsedTimeMs/blocksCreated);
         }
 
         log("Memory used after test: MB: " + endMbs);
         log("Consumed MBs: " + (endMbs - startMbs));
+        showUsedMemory();
 
         printMemStatsShort();
 
     }
 
-    public void existentReadNodes(Trie t) {
+    public void computeFixedKeyPart() {
+        if (fixedKeyPart == null) {
+            pseudoRandom.setSeed(0); // I want to replicate this easily
+            fixedKeyPart = pseudoRandom.randomBytes(stateTrieSim.fixKeySize);
+            log("fixedKeyPart: "+ByteUtil.toHexString(fixedKeyPart));
+        }
+    }
+
+    public void existentReadNodes(Trie t,boolean includeTopDownKeys) {
         byte[][] keys = null;
         boolean preloadKeys = false;
         boolean sequentialKeys = false;
@@ -433,6 +487,11 @@ public class CompareTries extends Benchmark {
         boolean x = false;
         if (x)
             return;
+
+        computeFixedKeyPart();
+        showCacheStats();
+
+
         if (preloadKeys) {
             keys = new byte[(int) (maxKeysTopDown + maxKeysBottomUp)][];
             for (int i = 0; i < keys.length; i++) {
@@ -442,13 +501,17 @@ public class CompareTries extends Benchmark {
         }
         started = System.currentTimeMillis();
         // now we count something
-        log("random existent key read...");
+
+        logNewSection("random existent key read...");
 
         long maxReads = 1_000_000;
         int found=0;
 
         boolean debugQueries = false;
-        int totalKeys =(int) (maxKeysTopDown + maxKeysBottomUp);
+        int totalKeys =(int) (maxKeysBottomUp );
+        if (includeTopDownKeys)
+             totalKeys += (int) (maxKeysTopDown);
+
         for(int i=0;i<maxReads;i++) {
             if (i % readsPerBlock==0) {
                 simulateNewBlock(false);
@@ -456,6 +519,7 @@ public class CompareTries extends Benchmark {
             if (i % 50000==0)
                 System.out.println("iteration: "+i);
             byte[] key;
+
             if (sequentialKeys)
                 key = getExistentKey((i+sequentialBase) % totalKeys);
             else
@@ -463,6 +527,9 @@ public class CompareTries extends Benchmark {
                 key = keys[i % keys.length];
             else {
                 key = getExistentRandomKey();
+            }
+            if (i<3) {
+                log(""+i+": fetching "+ByteUtil.toHexString(key));
             }
             if (debugQueries) {
                 TrieKeySlice eks = ExpandedTrieKeySlice.getFactory().
@@ -486,15 +553,30 @@ public class CompareTries extends Benchmark {
             log("Read existent leaf nodes/sec: " + randomExistentReadsPerSecond);
 
         }
-        log("Finished.");
+        showCacheStats();
+        logEndSection("Finished.");
     }
-    public void randomReadNodes(Trie t) {
+
+    public void showCacheStats() {
+        if (dsWithCache!=null) {
+            List<String> stats =dsWithCache.getStats();
+            log("Cache: ");
+            logList(" ",stats);
+            dsWithCache.resetHitCounters();
+
+            log("Cached elements: "+dsWithCache.countCommittedCachedElements());
+        }
+    }
+
+    public void randomReadNodes(Trie t,long maxReads) {
 
         started = System.currentTimeMillis();
         // now we count something
-        log("random read...");
+        logNewSection("random read...");
 
-        long maxReads = 10_000_000;
+        if (maxReads==0)
+            maxReads = 10_000_000;
+
         int found=0;
         for(int i=0;i<maxReads;i++) {
             if (i % readsPerBlock==0) {
@@ -515,29 +597,73 @@ public class CompareTries extends Benchmark {
             log("Read leaf nodes/sec: " + randomReadsPerSecond);
 
         }
-        log("Finished.");
+        logEndSection("Finished.");
     }
 
-    public void countNodes(Trie t) {
+    class Result {
+        long nodesCounted;
+        long nodesPerSecond;
 
+        public Result(long nodesCounted,
+                long nodesPerSecond) {
+            this.nodesCounted = nodesCounted;
+            this.nodesPerSecond = nodesPerSecond;
+        }
+    }
+
+    public void countNodes(String id,Trie t,long limit,boolean leafNodes) {
+        showCacheStats();
         started = System.currentTimeMillis();
+        // IMPORTANT: This is the worst case when the hashmap in the cache
+        // store less entries than the total number of nodes in the tree.
+        // For example, if count() is called two times, while traversing the first
+        // the cache will evict the elements that are needed for the next
+        // pass. Therefore the required node will never be in the cache.
+        // To test the cache and the eviction policy, we can execute the
+        // count method with a limit, or we can execute the existent elements
+        // read method twice.
+
         // now we count something
-        log("Counting...");
+        String sectionMod = "";
+        if (limit==0)
+            limit = Long.MAX_VALUE;
+        if (limit<Long.MAX_VALUE)
+            sectionMod = " (with limit "+limit+")";
 
-        //log("nodes: "+t.countNodes());
-        leafNodeCount = t.countLeafNodes();
+        logNewSection(id+"Counting..."+sectionMod);
+        long nodesCounted;
+
+        if (!leafNodes) {
+            nodesCounted = t.countNodes(limit);
+            if (limit==Long.MAX_VALUE)
+                nodeCount = nodesCounted;
+            log("nodes: " + nodesCounted );
+        } else {
+            nodesCounted = t.countLeafNodes(limit);
+            if (limit==Long.MAX_VALUE)
+                leafNodeCount = nodesCounted;
+            log("leaf nodes: " + nodesCounted);
+        }
         log("Counted!");
-
-        log("leaf nodes: "+leafNodeCount);
-
         ended = System.currentTimeMillis();
-        elapsedTime = (ended - started) / 1000;
+        long elapsedTimeMs = (ended - started);
+        elapsedTime = elapsedTimeMs / 1000;
         log("Elapsed time [s]: " + elapsedTime);
         if (elapsedTime!=0) {
-            scannedLeafNodesPerSecond = (max / elapsedTime);
-            log("Scanned leaf nodes/sec: " + scannedLeafNodesPerSecond); // 18K
+            long nodesPerSecond;
+            nodesPerSecond = (leafNodeCount * 1000L / elapsedTimeMs);
+            if (leafNodes) {
+                log("Scanned leaf nodes/sec: " + nodesPerSecond);
+                if (limit==Long.MAX_VALUE)
+                    scannedLeafNodesPerSecond = nodesPerSecond;
+            } else {
+                log("Scanned inner nodes/sec: " + nodesPerSecond);
+                if (limit==Long.MAX_VALUE)
+                    scannedNodesPerSecond = nodesPerSecond;
+            }
         }
-        log("Finished.");
+        showCacheStats();
+        logEndSection("Finished.");
     }
 
     public static int log2(long n){
@@ -552,13 +678,7 @@ public class CompareTries extends Benchmark {
     int subTreeSize;
 
 
-    public void buildbottomUp() {
-        log("buildbottomUp max="+max);
-        maxKeysBottomUp = max;
-        prepare();
-        // The idea is that we create the terminal nodes, then we pair them up
-        // and keep doing this.
-        // We don't store the leaf nodes, they are generated dynamically
+    public void computeBottomUpBitSizes(long max) {
         long width = max; // this is the total number of elements in the tree
         int log2w = log2(width);
         if ((1 << log2w) != width)
@@ -567,12 +687,22 @@ public class CompareTries extends Benchmark {
         // Intermediate bits do not contain fixed bits.
         // Intermediate bits are all variable bits
         intermediateBits =log2w;
-        // leafBits are the bits that will be chosen randombly as leaf nodes prefixes
+        // leafBits are the bits that will be chosen randomly as leaf nodes prefixes
         leafBits = stateTrieSim.varKeySize *8-intermediateBits;
         if (leafBits<0)
             throw new RuntimeException("Not enough leaves");
 
         splitBits = intermediateBits;
+    }
+
+    public void buildbottomUp() {
+        logNewSection("buildbottomUp max="+max);
+        maxKeysBottomUp = max;
+        prepare();
+        // The idea is that we create the terminal nodes, then we pair them up
+        // and keep doing this.
+        // We don't store the leaf nodes, they are generated dynamically
+        computeBottomUpBitSizes(maxKeysBottomUp);
         // it will be split in subTreeCount subtrees
         int stCount = subTreeCount;
         // Each node corresponds to a subtree
@@ -582,12 +712,12 @@ public class CompareTries extends Benchmark {
         //
 
         int subTreeBits = log2(stCount);
-        long lsubTreeSize  = width/stCount;
+        long lsubTreeSize  = maxKeysBottomUp/stCount;
         if (lsubTreeSize>Integer.MAX_VALUE)
             throw new RuntimeException("invalid width");
 
         subTreeSize = (int) lsubTreeSize;
-        int stWidth = (int) width/stCount;
+        int stWidth = (int) maxKeysBottomUp/stCount;
         if (stWidth==0)
             throw new RuntimeException("Not enough leafts");
 
@@ -607,7 +737,7 @@ public class CompareTries extends Benchmark {
         System.out.println("Pre fix part: ");
         //dumpTrie();
         if (stateTrieSim.fixKeySize>0) {
-            fixedKeyPart = TestUtils.getPseudoRandom().randomBytes(stateTrieSim.fixKeySize);
+            computeFixedKeyPart();
             // we set the last bit forced
             // leave 1 bit out for the node branch
             PseudoRandom.setCompactBit(fixedKeyPart,stateTrieSim.fixKeySize*8-1,false); // make sure we create the right child.
@@ -632,19 +762,51 @@ public class CompareTries extends Benchmark {
         stop(true);
         dumpResults();
         timeToBuildTree = elapsedTime;
+        logEndSection("Finished.");
 
         // This flush operation will compute all hashes for millions of nodes
         // It can take minutes
-        log("Start saving (all nodes hashes computed)...");
+        logNewSection("Start saving (all nodes hashes computed)...");
         saveTrie();
         log("stop saving");
         log("Start flushing..");
         flushTrie();
         log("stop flushing");
-
+        logEndSection("Finished.");
         //countNodes(t);
-        existentReadNodes(rootNode);
     }
+
+    void destroyTreeAndLog() {
+        log("Destroying the tree in memory");
+        destroyTree();
+    }
+
+    void storeRootNode() {
+        Keccak256 rootNodeHash = rootNode.getHash();
+
+        // We'll store the hash in a special node
+        dsDB.put("root".getBytes(StandardCharsets.UTF_8),rootNodeHash.getBytes());
+        log("Storing root node hash: "+rootNodeHash.toHexString());
+    }
+
+    void destroyTree() {
+        if (GlobalEncodedObjectStore.get() == null) {
+            // too mucho noise: log("Destroying the tree in memory");
+            // If there is no encoded object store, we emulate
+            // that a following block must be mined. So we must dispose the current trie
+            // and reload it from disk or any other TrieStore cache that exists.
+            Keccak256 rootNodeHash = rootNode.getHash();
+            rootNode = null; // make sure nothing is left
+            setRootNode(rootNodeHash.getBytes());
+
+        } else {
+            // If we have an encoded object store, we never throw away the root
+            // but we still have to flush things to disk
+            //El problema es que el encoded store no guarda un flag indicando si el nodo esta
+            //        en disco o no. Eso hace que siempre se regrabe
+        }
+    }
+
     PseudoRandom pseudoRandom = new PseudoRandom();
 
     Trie buildSubtree(int width, int intermediateBits, int leafBits) {
@@ -754,9 +916,11 @@ public class CompareTries extends Benchmark {
             name = name + "-" + testMode.toString();
             name = name +"-Max_"+ getMillions( Runtime.getRuntime().maxMemory());
             name = name +"-"+hashMapDataStructure.toString();
+            name = name + "-SCS_"+getK(statesCacheSize);
+            //name = name + dsWithCache.getModifiers();
 
             Date date = Calendar.getInstance().getTime();
-            DateFormat dateFormat = new SimpleDateFormat("yyyy-mm-dd hh.mm.ss");
+            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss");
             String strDate = dateFormat.format(date);
             name = name + "-"+ strDate;
 
@@ -819,6 +983,22 @@ public class CompareTries extends Benchmark {
         smallWorldTest(chooseEncodedStoreClass());
     }
 
+    public void seedTest() {
+        testMode = StateTrieSimulator.SimMode.simEOAs;
+        stateTrieSim.setSimMode(testMode);
+        computeAverageAccountSize();
+        computeKeySizes();
+        computeFixedKeyPart();
+    }
+
+    public void writeTest() {
+        writeTest(chooseEncodedStoreClass());
+    }
+
+    public void readTest() {
+        readTest(chooseEncodedStoreClass());
+    }
+
     public void setupGlobalClasses(EncodedObjectStore encodedObjectStore) {
         GlobalEncodedObjectStore.set(encodedObjectStore);
         //EncodedObjectHeap.default_spaceMegabytes = 500;
@@ -843,27 +1023,71 @@ public class CompareTries extends Benchmark {
         String maxStr = ""+ (i/1000/1000)+"M";
         return maxStr;
     }
+    public String getK(long i) {
+        String maxStr = ""+ (i/1000)+"K";
+        return maxStr;
+    }
 
 
 
-    public void smallWorldTest(Class<? extends EncodedObjectStore> aClass) {
-        //testMode = TestMode.testERC20Balances;
-        //testMode = TestMode.testERC20LongBalances;
+    public void cacheTest(Class<? extends EncodedObjectStore> aClass) {
         testMode = StateTrieSimulator.SimMode.simEOAs;
         long addMaxKeysBottomUp  = 1L * (1 << 20);
-        long addMaxKeysTopDown = 1L * (1 << 20)/2; // total: 1.5M
-        boolean testExistentKeys = false;
+        long testCacheLimit = 1_000_000;
+        long maxRandomReads = 10_000_000;
 
-        if (testExistentKeys) {
-            testMode = StateTrieSimulator.SimMode.simMicroTest;
-            addMaxKeysBottomUp = 64;
-            addMaxKeysTopDown = 0;
-            subTreeCount = 8;
-        }
+        log("Test cache");
+        testCacheSize = 4_000; // 50% of the nodes (many nodes are embedded)
+        adjustCacheSize = false;
+        addMaxKeysBottomUp = (1<<14); // 16K
+        testCacheLimit = 999;
+        String testName;
+        testName = "cachetest";
+        maxRandomReads = 16_000;
+        String maxStr = ""+ getMillions(addMaxKeysBottomUp );
 
+        setupEncodedObjectStore(aClass);
+        prepare();
+        openTrieStore(true,false,"");
+        getTrieStore();
+        createLogFile(testName,maxStr);
+        logGlobalClasses();
+
+        max = addMaxKeysBottomUp ;
+        buildbottomUp();
+
+        // It's very important to destroy the tree in memory to get
+        // a real measurement of how the cache works
+
+        destroyTreeAndLog();
+        showUsedMemory();
+        showHashtableStats();
+
+        // First, read random nodes to shuffle the elements of the
+        // cache and make sure not all of them are in memory
+        randomReadNodes(rootNode,maxRandomReads);
+
+        // It's very important to destroy the tree in memory to get
+        // a real measurement of how the cache works
+        destroyTreeAndLog();
+        countNodes("CacheTest: PASS 1: ",rootNode,testCacheLimit,false);
+        destroyTreeAndLog();
+
+        // It's possible that when scanning, items are moved to the top, which
+        // causes items to be evicted? We disconnect this mechanism to test this
+        // hypothesis
+        boolean oldAccess =getCacheTopPriorityOnAccess();
+        setCacheTopPriorityOnAccess(false);
+        countNodes("CacheTest: PASS 2: ",rootNode,testCacheLimit,false);
+        setCacheTopPriorityOnAccess(oldAccess);
+        showUsedMemory();
+        closeLog();
+
+    }
+
+    public void setupEncodedObjectStore(Class<? extends EncodedObjectStore> aClass) {
         // To store 10M accounts, you need at least 1.5 GB of storage.
         int memoryForStoreMegabytes = 2000; // 2 GB
-        String maxStr = ""+ getMillions(addMaxKeysBottomUp )+" plus "+getMillions(addMaxKeysTopDown);
 
         EncodedObjectStore encodedObjectStore =getEncodedStore(aClass);
         // I setup the global encoded object store here so that the log filename
@@ -873,10 +1097,110 @@ public class CompareTries extends Benchmark {
             encodedObjectStore.setMaxMemory(memoryForStoreMegabytes * 1000L * 1000L);
             encodedObjectStore.initialize();
         }
-        getTrieStore();
-        createLogFile("swtest",maxStr);
-        logGlobalClasses();
+    }
 
+    // Requires that the database is already loaded with all the data
+    public void readTest(Class<? extends EncodedObjectStore> aClass) {
+        testMode = StateTrieSimulator.SimMode.simEOAs;
+        maxKeysBottomUp  = 1L * (1 << 20);
+        maxKeysTopDown = 1L * (1 << 20)/2; // total: 1.5M
+        long totalKeys = maxKeysBottomUp+maxKeysTopDown;
+
+        String dbName = testMode.toString()+""+maxKeysBottomUp+"plus"+maxKeysTopDown;
+        String testName ="readtest";
+        String maxStr = "";
+
+        setupEncodedObjectStore(aClass);
+        prepare();
+        computeBottomUpBitSizes(maxKeysBottomUp);
+        openTrieStore(false,false,dbName);
+        dsWithCache.readOnly = true;
+        setRootNode(null);
+        getTrieStore();
+        createLogFile(testName,maxStr);
+        logGlobalClasses();
+        readTestInternal();
+        dumpResultsInCSV();
+        closeLog();
+    }
+
+    public void setRootNode(byte[] rootNodeHash) {
+        if (rootNodeHash==null) {
+            rootNodeHash = dsDB.get("root".getBytes(StandardCharsets.UTF_8));
+            log("Reading root node hash: "+  ByteUtil.toHexString(rootNodeHash));
+        }
+
+        Optional<Trie> optRootNode = getTrieStore().retrieve(rootNodeHash);
+        if (!optRootNode.isPresent()) {
+            System.out.println("Could not retrieve node ");
+            System.exit(1);
+        }
+        rootNode = optRootNode.get();
+    }
+
+    public void readTestInternal() {
+        long testCacheLimit = 1_000_000;
+
+        countNodes("TD: ", rootNode, 0, true);
+        showHashtableStats();
+        // It's very important to destroy the tree in memory to get
+        // a real measurement of how the cache works
+        destroyTreeAndLog();
+        countNodes("CacheTest: PASS 1: ", rootNode, testCacheLimit, false);
+        destroyTreeAndLog();
+
+        // It's possible that when scanning, items are moved to the top, which
+        // causes items to be evicted? We disconnect this mechanism to test this
+        // hypothesis
+        boolean oldAccess = getCacheTopPriorityOnAccess();
+        setCacheTopPriorityOnAccess(false);
+        countNodes("CacheTest: PASS 2: ", rootNode, testCacheLimit, false);
+        setCacheTopPriorityOnAccess(oldAccess);
+
+        showUsedMemory();
+
+        existentReadNodes(rootNode, true);
+        randomReadNodes(rootNode, 0);
+        logTraceInfo();
+    }
+
+    public void writeTest(Class<? extends EncodedObjectStore> aClass) {
+        testMode = StateTrieSimulator.SimMode.simEOAs;
+        long addMaxKeysBottomUp  = 1L * (1 << 20);
+        long addMaxKeysTopDown = 1L * (1 << 20)/2; // total: 1.5M
+
+        String testName ="writetest";
+        String maxStr = ""+ getMillions(addMaxKeysBottomUp )+" plus "+getMillions(addMaxKeysTopDown);
+        createLogFile(testName,maxStr);
+
+        setupEncodedObjectStore(aClass);
+        prepare();
+        writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,"");
+        dumpResultsInCSV();
+        closeLog();
+    }
+
+    public void writeTestInternal(
+            long addMaxKeysBottomUp,long addMaxKeysTopDown,String tmpDbNamePrefix ) {
+        //testMode = TestMode.testERC20Balances;
+        //testMode = TestMode.testERC20LongBalances;
+        testMode = StateTrieSimulator.SimMode.simEOAs;
+
+        // To be able to reconstruct existing kety, we need to know how many
+        // keys are top-down and how many are bottom-up
+        long totalKeys = addMaxKeysBottomUp+addMaxKeysTopDown;
+
+        String dbName = testMode.toString()+""+tmpDbNamePrefix+addMaxKeysBottomUp+"plus"+addMaxKeysTopDown;
+
+        if (tmpDbNamePrefix.length()>0) {
+            // Temporary DB. Can delete freely
+            openTrieStore(true,false,dbName);
+        } else
+           openTrieStore(false,true,dbName);
+
+        getTrieStore();
+
+        logGlobalClasses();
         if (addMaxKeysBottomUp >0) {
             // Create a high number of accounts bottom-up
             // This is a much faster method, as it doesn't create waste in
@@ -884,25 +1208,72 @@ public class CompareTries extends Benchmark {
             // doesn't trigger Java's GC often)
             max = addMaxKeysBottomUp ;
             buildbottomUp();
-            countNodes(rootNode);
+
+            // It's very important to destroy the tree in memory to get
+            // a real measurement of how the cache works
+
+            destroyTreeAndLog();
+            showUsedMemory();
+
+            existentReadNodes(rootNode, false);
+            countNodes("BU: ", rootNode, 0, true);
+
+            showHashtableStats();
+
+
             //System.exit(0);
         }
-        // Add another number of accounts, but this time by inserting
-        // elements in the trie. This is slower, and creates unused nodes
-        // that our GC must collect. It also creates a high number of temporal
-        // Java objects that the Java GC need to periodically collect.
-        // now add another 8M items to it!
-        max = addMaxKeysTopDown;
-        buildByInsertion();
-        logTraceInfo();
-        logBlocksCreated();
-        countNodes(rootNode);
 
-        existentReadNodes(rootNode);
-        randomReadNodes(rootNode);
-        logTraceInfo();
+        if (addMaxKeysTopDown>0) {
+            // Add another number of accounts, but this time by inserting
+            // elements in the trie. This is slower, and creates unused nodes
+            // that our GC must collect. It also creates a high number of temporal
+            // Java objects that the Java GC need to periodically collect.
+            // now add another 8M items to it!
+            max = addMaxKeysTopDown;
+            buildByInsertion();
+            logTraceInfo();
+            logBlocksCreated();
+        }
+        storeRootNode();
+    }
+
+    public void smallWorldTest(Class<? extends EncodedObjectStore> aClass) {
+        testMode = StateTrieSimulator.SimMode.simEOAs;
+        long addMaxKeysBottomUp  = 1L * (1 << 20);
+        long addMaxKeysTopDown = 1L * (1 << 20)/2; // total: 1.5M
+
+        setupEncodedObjectStore(aClass);
+        prepare();
+        String testName ="swtest";
+        String maxStr = ""+ getMillions(addMaxKeysBottomUp )+" plus "+getMillions(addMaxKeysTopDown);
+
+        createLogFile(testName,maxStr);
+        logGlobalClasses();
+
+        writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,"tmp");
+        readTestInternal();
         dumpResultsInCSV();
         closeLog();
+    }
+
+    public void showHashtableStats() {
+        log("Hashtable: ");
+        List<String> stats =dsWithCache.getHashtableStats();
+        logList(" ",stats);
+    }
+
+    public boolean getCacheTopPriorityOnAccess() {
+        if (dsWithCache instanceof  DataSourceWithLinkedBACache) {
+            return ((DataSourceWithLinkedBACache) dsWithCache).getTopPriorityOnAccess();
+        }
+        return false;
+    }
+
+    public void setCacheTopPriorityOnAccess(boolean v) {
+        if (dsWithCache instanceof  DataSourceWithLinkedBACache) {
+            ((DataSourceWithLinkedBACache) dsWithCache).setTopPriorityOnAccess(v);
+        }
     }
 
     public void logBlocksCreated() {
@@ -919,6 +1290,13 @@ public class CompareTries extends Benchmark {
         }
 
     }
+
+    public void logList(String s,List<String> stats) {
+        for(int i=0;i<stats.size();i++) {
+            log(s + stats.get(i));
+        }
+    }
+
     public void dumpResultsInCSV() {
         log("name,rootNodeHash,leafNodeCount,maxKeysBottomUp,maxKeysTopDown,endMbs,"+
                 "randomExistentReadsPerSecond,"+
@@ -934,7 +1312,9 @@ public class CompareTries extends Benchmark {
                 leafNodeCount+","+
                 scannedLeafNodesPerSecond+","+
                 timeToInsertElements+","+
-                timeToBuildTree);
+                timeToBuildTree+","+
+                nodeCount+","+
+                scannedNodesPerSecond);
     }
 
     public void topDownTest(Class<? extends EncodedObjectStore> aClass) {
@@ -955,7 +1335,7 @@ public class CompareTries extends Benchmark {
         } else {
             testName = "tdtest";
         }
-        System.out.println("Creating the store...");
+        logNewSection("Creating the store...");
         EncodedObjectStore encodedObjectStore =getEncodedStore(aClass);
 
         testMode = StateTrieSimulator.SimMode.simEOAs;
@@ -963,6 +1343,7 @@ public class CompareTries extends Benchmark {
         setupGlobalClasses(encodedObjectStore);
         encodedObjectStore.setMaxMemory(memoryForStoreMegabytes*1000L*1000L);
         encodedObjectStore.initialize();
+        logEndSection("store created.");
 
         max = 1000; //1L*(1<<19);
         String maxStr = ""+ getMillions(max);
@@ -978,9 +1359,9 @@ public class CompareTries extends Benchmark {
         //
 
         buildByInsertion();
-        existentReadNodes(rootNode);
-        countNodes(rootNode);
-        randomReadNodes(rootNode);
+        existentReadNodes(rootNode,true);
+        countNodes("",rootNode,0,true);
+        randomReadNodes(rootNode,0);
         dumpResultsInCSV();
         closeLog();
     }
@@ -998,13 +1379,13 @@ public class CompareTries extends Benchmark {
         subTreeCount = 4;
         max = 4;
         buildbottomUp();
-        countNodes(rootNode);
+        countNodes("",rootNode,0,true);
         dumpTrie();
         log("---------------------------");
 
         max = 4;
         buildByInsertion();
-        countNodes(rootNode);
+        countNodes("",rootNode,0,true);
         dumpTrie();
         String[] expectedResult = new String[]{
                 "0000000",
@@ -1082,7 +1463,7 @@ public class CompareTries extends Benchmark {
 
         long rootOfs = EncodedObjectHeap.get().load("4M");
         rootNode = retrieveNode(new LongEOR(rootOfs));
-        countNodes(rootNode);
+        countNodes("",rootNode,0,true);
         System.exit(0);
         // now add another 8M items to it!
         max = 8L * (1 << 20);
@@ -1100,7 +1481,10 @@ public class CompareTries extends Benchmark {
         CompareTries c = new CompareTries();
         //c.topdownTest();
         //c.buildbottomUp();
-        c.smallWorldTest();
+        //c.smallWorldTest();
+        //c.seedTest();
+        //c.writeTest();
+        c.readTest();
         //c.microWorldTest(chooseEncodedStore());
         System.exit(0);
     }

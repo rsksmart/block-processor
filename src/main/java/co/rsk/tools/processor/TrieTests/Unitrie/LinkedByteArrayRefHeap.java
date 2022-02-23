@@ -34,6 +34,7 @@ public class LinkedByteArrayRefHeap implements AbstractByteArrayRefHeap  {
     }
 
     protected void addToTail(int handle) {
+        next[handle] = -1;
         if (tail!=-1) {
             next[tail] = handle;
             prev[handle] = tail;
@@ -41,7 +42,10 @@ public class LinkedByteArrayRefHeap implements AbstractByteArrayRefHeap  {
             if (head!=-1)
                 throw new RuntimeException("bad state");
             head = handle;
+            prev[handle] = -1;
         }
+        tail = handle;
+        next[handle] = -1;
     }
 
     public void reset() {
@@ -72,9 +76,10 @@ public class LinkedByteArrayRefHeap implements AbstractByteArrayRefHeap  {
 
     protected int getNewHandle(byte[] d) {
         int newHandle = unused;
-        if (unused==-1)
+        if (unused==-1) {
             unused = unused;
-
+            throw new RuntimeException("no more handles");
+        }
         int n = next[unused];
         if (n==-1)
             unused = unused;

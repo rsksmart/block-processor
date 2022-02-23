@@ -18,27 +18,35 @@ public class Benchmark {
     FileWriter myWriter;
 
 
+    public void showUsedMemory() {
+        garbageCollector();
+        long usedMemoryMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
+        log("Memory used now [MB]: " + usedMemoryMbs);
+    }
     public void start(boolean showMem) {
-        startMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
-
+        long usedMemoryMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
+        startMbs = usedMemoryMbs;
         if (showMem) {
             log("-- Java Total Memory [MB]: " + Runtime.getRuntime().totalMemory() / 1024 / 1024);
             log("-- Java Free Memory [MB]: " + Runtime.getRuntime().freeMemory() / 1024 / 1024);
             log("-- Java Max Memory [MB]: " + Runtime.getRuntime().maxMemory() / 1024 / 1024);
-            log("Used Before MB: " + startMbs);
+            log("Used before start [MB]: " + startMbs);
         }
 
         started = System.currentTimeMillis();
         log("Starting...");
     }
 
+    public void garbageCollector() {
+        log("Forced system garbage collection");
+        System.gc();
+        log("Forced store garbage collection");
+    }
     public void stop(boolean showmem) {
         ended = System.currentTimeMillis();
-        System.out.println("Stopped.");
+        log("Stopped.");
         if (showmem) {
-            System.out.println("Forced system garbage collection");
-            System.gc();
-            System.out.println("Forced store garbage collection");
+            garbageCollector();
             userGarbageCollector();
         }
         endMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
@@ -110,14 +118,31 @@ public class Benchmark {
     }
 
     long startMillis = System.currentTimeMillis();
+    String newSection = ">>> ";
+    String endSection = "<<< ";
 
-    public void log(String s) {
-        long stime = System.currentTimeMillis()-startMillis;
-        long sec = stime /1000;
-        long mil = stime % 1000;
-        String strDate =""+sec+"."+mil+": ";
+    public void logEndSection(String s) {
+        log(endSection + s);
+        log("",false);
+    }
 
-        System.out.println(strDate+": "+s);
+    public void logNewSection(String s) {
+        log("",false);
+        log(newSection+s);
+    }
+
+    public void log(String s,boolean addDate) {
+        String strDate;
+        if (addDate) {
+            long stime = System.currentTimeMillis() - startMillis;
+            long sec = stime / 1000;
+            long mil = stime % 1000;
+            strDate = "" + sec + "." + mil + ": ";
+            s = strDate + s;
+        } else
+            strDate = "";
+
+        System.out.println(s);
         if (myWriter==null) return;
 
         try {
@@ -126,7 +151,10 @@ public class Benchmark {
             System.out.println("An error occurred.");
             e.printStackTrace();
         }
+    }
 
+    public void log(String s) {
+        log(s,true);
     }
 
     public void dumpSpeedResults(int max) {

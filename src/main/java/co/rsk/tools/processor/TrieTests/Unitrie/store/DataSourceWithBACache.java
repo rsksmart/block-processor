@@ -18,22 +18,16 @@
  */
 package co.rsk.tools.processor.TrieTests.Unitrie.store;
 
-import co.rsk.tools.processor.TrieTests.Logger;
-import co.rsk.tools.processor.TrieTests.LoggerFactory;
+
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
-import co.rsk.util.FormatUtils;
 import org.ethereum.datasource.CacheSnapshotHandler;
 import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.db.ByteArrayWrapper;
-import org.ethereum.util.ByteUtil;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-public class DataSourceWithBACache extends DataSourceWithCACache {
+
+public class DataSourceWithBACache extends DataSourceWithCacheAndStats {
 
     public DataSourceWithBACache(KeyValueDataSource base, int cacheSize) {
         this(base, cacheSize, null);
@@ -47,6 +41,7 @@ public class DataSourceWithBACache extends DataSourceWithCACache {
 
     // We need to limit the CAHashMap cache.
 
+    MaxSizeByteArrayHashMap innerCache;
     protected Map<ByteArrayWrapper, byte[]> makeCommittedCache(int cacheSize,
                                                                      CacheSnapshotHandler cacheSnapshotHandler) {
         TrieCACacheRelation myKeyValueRelation = new TrieCACacheRelation();
@@ -62,8 +57,9 @@ public class DataSourceWithBACache extends DataSourceWithCACache {
         else
             beHeapCapacity =(long) cacheSize*avgElementSize*14/10;
 
-        PrioritizedByteArrayHashMap bamap =  new PrioritizedByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,cacheSize);
-        bamap.removeInBulk = removeInBulk;
+        MaxSizeByteArrayHashMap bamap =  new MaxSizeByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,
+                null,cacheSize);
+        innerCache = bamap;
 
         Map<ByteArrayWrapper, byte[]> cache =bamap;
         if (cacheSnapshotHandler != null) {
@@ -71,5 +67,15 @@ public class DataSourceWithBACache extends DataSourceWithCACache {
         }
 
         return cache;
+    }
+
+    public List<String> getHashtableStats() {
+        List<String> list = new ArrayList<>();
+        if (committedCache!=null) {
+            list.add("longestFilledRun: "+innerCache.longestFilledRun());
+            list.add("averageFilledRun: "+innerCache.averageFilledRun());
+        }
+
+        return list;
     }
 }

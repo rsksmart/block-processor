@@ -1417,21 +1417,28 @@ public class Trie {
         return this;
     }
 
-    public long countNodes() {
+    public long countNodes(long limit) {
         long nodes = 1;
+        limit--;
+        if (limit>0)
         for (byte k = 0; k < ARITY; k++) {
             Trie node = this.retrieveNode(k);
 
             if (node == null) {
                 continue;
             }
-
-            nodes +=node.countNodes();
+            long c =node.countNodes(limit);
+            nodes +=c;
+            limit -=c;
+            if (limit<=0)
+                break;
         }
         return nodes;
     }
 
-    public long countLeafNodes() {
+    public long countLeafNodes(long limit) {
+        if (limit<=0)
+            return 0;
         long nodes = 0;
         for (byte k = 0; k < ARITY; k++) {
             Trie node = this.retrieveNode(k);
@@ -1439,8 +1446,11 @@ public class Trie {
             if (node == null) {
                 continue;
             }
-
-            nodes +=node.countLeafNodes();
+            long c = node.countLeafNodes(limit);
+            nodes +=c;
+            limit -=c;
+            if (limit<=0)
+                break;
         }
         if (nodes==0)
             return 1;

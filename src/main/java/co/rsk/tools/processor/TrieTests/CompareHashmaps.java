@@ -127,7 +127,7 @@ public class CompareHashmaps extends Benchmark {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             LinkedByteArrayRefHeap sharedBaHeap = new LinkedByteArrayRefHeap(maxSize,8);
             MaxSizeLinkedByteArrayHashMap pmap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFactor,myKR,0,sharedBaHeap,
-                    maxSize );
+                    maxSize,true );
             map = pmap;
         } else
         if (testDS== DataStructure.PrioritizedByteArrayHashMap) {

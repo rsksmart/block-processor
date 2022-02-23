@@ -22,6 +22,8 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
     static final long defaultNewBeHeapCapacity = 750_000_000;
     static final int empty = Integer.MIN_VALUE;
     static final boolean debugCheckHeap = false;
+    static final String debugKey = null;
+
     transient int[] table;
     transient int size;
     transient int modCount;
@@ -230,23 +232,24 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         int n = table.length;
         if (this.table==null) return -1;
         int idx = (n - 1) & hash;
-        int first  = table[idx];
+        int markedHandle;
         do {
-            if (first == empty) return -1;
-            if (!isValueHandle(first)) {
-                byte[] keyBytes = baHeap.retrieveData(unmarkHandle(first));
+            markedHandle  = table[idx];
+            if (markedHandle == empty)
+                return -1;
+            if (!isValueHandle(markedHandle)) {
+                byte[] keyBytes = baHeap.retrieveData(unmarkHandle(markedHandle));
                 if (ByteUtil.fastEquals(keyBytes, ((ByteArrayWrapper)key).getData() )) {
-                    return first;
+                    return markedHandle;
                 }
             } else {
-                byte[] data = baHeap.retrieveData(first);
+                byte[] data = baHeap.retrieveData(markedHandle);
                 ByteArrayWrapper aKey = computeKey(data);
                 if (aKey.equals(key))
-                    return first;
+                    return markedHandle;
             }
             idx = (idx+1) & (n-1);
-        } while (table[idx]!=empty);
-        return -1;
+        } while (true);
     }
 
     public boolean containsKey(Object key) {
@@ -272,6 +275,8 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         } else
             this.size++;
 
+        if (i==8046)
+            i = i;
         if (data==null) {
             handle = baHeap.add(key, metadata);
             table[i] = setNullHandle(handle);
@@ -296,6 +301,9 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
 
     final byte[] putVal(int hash, ByteArrayWrapper key, byte[] value, boolean onlyIfAbsent, boolean evict) {
         int n;
+        if ((debugKey!=null) && (key.toString().equals(debugKey))) {
+            key = key;
+        }
         if ((table == null) || (n = table.length) == 0) {
             this.resize();
             n = table.length;
@@ -870,7 +878,10 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
     // Returns true if the element used to fill the empty slot j was at an index equal or higher than
     // the one given by argument boundary.
     boolean fillGap(int j,int boundary) {
+
         int i = j;
+        if (i==8046)
+            i = i;
         boundary = boundary % table.length;
         boolean crossedBoundary = false;
         boolean wrapAroundZero = false;
@@ -941,6 +952,26 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
 
     }
 
+    public int countElements() {
+        // this should return the same value than size()
+        if (this.table == null) return 0;
+        int count = 0;
+        int mc = this.modCount;
+        int tabLen = table.length;
+        for (int i = 0; i < tabLen; ++i) {
+            int p = table[i];
+            if (p != empty) {
+                count++;
+            }
+        }
+
+        if (ByteArrayHashMap.this.modCount != mc) {
+            throw new ConcurrentModificationException();
+        }
+
+        return count;
+    }
+
     public int longestFilledRun() {
         if (this.table == null) return 0;
         int maxRun = 0;
@@ -963,6 +994,43 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         return maxRun;
     }
 
+    public double averageFilledRun() {
+        if (this.table == null) return 0;
+
+        double acum = 0;
+        int count = 0;
+        int mc = this.modCount;
+        int tabLen = table.length;
+        for (int i = 0; i < tabLen; ++i) {
+            int p = table[i];
+            if (p != empty) {
+                count++;
+                // I need to recover the slot to see if it is in the
+                // right slot.
+                ByteArrayWrapper aKey;
+                if (!isValueHandle(p)) {
+                    byte[] keyBytes = baHeap.retrieveData(unmarkHandle(p));
+                    aKey = new ByteArrayWrapper(keyBytes);
+                } else {
+                    byte[] data = baHeap.retrieveData(p);
+                    aKey = computeKey(data);
+                }
+                int pos = hash(aKey) & (table.length-1);
+                if (pos<=i)
+                    acum +=(i-pos+1);
+                else {
+                    acum +=(table.length-pos)+i;
+                }
+            }
+        }
+        // wrap-around element not counted
+
+        if (ByteArrayHashMap.this.modCount != mc) {
+            throw new ConcurrentModificationException();
+        }
+
+        return acum/count;
+    }
     // For each entry in the map. Each entry contains key and value.
     public final void forEach(Consumer<? super byte[]> action) {
         if (action == null) {
