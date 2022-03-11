@@ -50,7 +50,7 @@ public class DataSourceWithBACache extends DataSourceWithCacheAndStats {
         int avgElementSize =88;
         long beHeapCapacity;
         boolean removeInBulk = true;
-        float loadFActor = 0.3f;
+        float loadFActor =getDefaultLoadFactor();
         int initialSize = (int) (cacheSize/loadFActor);
         if (removeInBulk)
             beHeapCapacity =(long) cacheSize*avgElementSize*11/10;
@@ -77,5 +77,9 @@ public class DataSourceWithBACache extends DataSourceWithCacheAndStats {
         }
 
         return list;
+    }
+
+    static public float getDefaultLoadFactor() {
+        return 0.3f;
     }
 }

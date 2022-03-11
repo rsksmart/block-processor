@@ -53,7 +53,7 @@ public class DataSourceWithCACache extends DataSourceWithCacheAndStats {
     protected Map<ByteArrayWrapper, byte[]> makeCommittedCache(int cacheSize,
                                                                      CacheSnapshotHandler cacheSnapshotHandler) {
         TrieCACacheRelation myKeyValueRelation = new TrieCACacheRelation();
-        Map<ByteArrayWrapper, byte[]> cache = new CAHashMap<>(cacheSize, 0.3f,myKeyValueRelation);
+        Map<ByteArrayWrapper, byte[]> cache = new CAHashMap<>(cacheSize, getDefaultLoadFactor(),myKeyValueRelation);
 
         if (cacheSnapshotHandler != null) {
             cacheSnapshotHandler.load(cache);
@@ -62,5 +62,8 @@ public class DataSourceWithCACache extends DataSourceWithCacheAndStats {
         return cache;
     }
 
+    static public float getDefaultLoadFactor() {
+        return 0.3f;
+    }
 
 }

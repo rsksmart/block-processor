@@ -35,6 +35,9 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
 
     long committedCacheHits;
     long committedCacheMisses;
+    long puts;
+    long gets;
+    long getsFromStore;
 
     public DataSourceWithCacheAndStats(KeyValueDataSource base, int cacheSize) {
         this(base, cacheSize, null);
@@ -62,6 +65,7 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
         byte[] value;
 
         this.lock.readLock().lock();
+        gets++;
 
         try {
             // An element cannot be in both the committed or uncommitted cache
@@ -82,8 +86,18 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
                 return uncommittedCache.get(wrappedKey);
             }
 
-            value = base.get(key);
 
+            value = base.get(key);
+            if (dump) {
+                if (value!=null)
+                System.out.println("Reading base key: "+wrappedKey.toString().substring(0,8)+
+                        " value "+
+                        ByteUtil.toHexString(value).substring(0,8)+".. length "+value.length);
+                else
+                    System.out.println("Reading base key: "+wrappedKey.toString().substring(0,8)+
+                            " failed");
+            }
+            getsFromStore++;
             if (traceEnabled) {
                 numOfGetsFromStore.incrementAndGet();
             }
@@ -125,9 +139,16 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
         return put(wrappedKey, value);
     }
 
+    boolean dump = false;
     private byte[] put(ByteArrayWrapper wrappedKey, byte[] value) {
         checkReadOnly();
         Objects.requireNonNull(value);
+        puts++;
+        if (dump) {
+            System.out.println("Writing key "+wrappedKey.toString().substring(0,8)+
+                            " value "+
+            ByteUtil.toHexString(value).substring(0,8)+".. length "+value.length);
+        }
 
         this.lock.writeLock().lock();
 
@@ -260,6 +281,9 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
 
     @Override
     public void flush() {
+        if (dump)
+            System.out.println("flushing...");
+
         Map<ByteArrayWrapper, byte[]> uncommittedBatch = new LinkedHashMap<>();
 
         this.lock.writeLock().lock();
@@ -373,6 +397,9 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
     public void resetHitCounters() {
         committedCacheHits=0;
         committedCacheMisses=0;
+        puts=0;
+        gets=0;
+        getsFromStore=0;
     }
 
     public List<String> getHashtableStats() {
@@ -382,6 +409,9 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
 
     public List<String> getStats() {
         List<String> list = new ArrayList<>();
+        list.add("puts: " +puts);
+        list.add("gets: " +gets);
+        list.add("getsFromStore: " +getsFromStore);
         if (committedCache!=null) {
             long total = (committedCacheHits+committedCacheMisses);
             if (total>0)
@@ -394,5 +424,14 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
         }
         list.add("uncommittedCache.size(): "+uncommittedCache.size());
         return list;
+    }
+
+    static public float getDefaultLoadFactor() {
+        return 0.75f; // This is MaxSizeHashMap default.
+    }
+
+    public void clear() {
+        committedCache.clear();
+        uncommittedCache.clear();
     }
 }

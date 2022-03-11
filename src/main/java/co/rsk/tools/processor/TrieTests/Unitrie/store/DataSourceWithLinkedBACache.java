@@ -43,12 +43,11 @@ public class DataSourceWithLinkedBACache extends DataSourceWithCacheAndStats {
         setTopPriorityOnAccess(true);
     }
 
-
     protected Map<ByteArrayWrapper, byte[]> makeCommittedCache(int cacheSize,
                                                                CacheSnapshotHandler cacheSnapshotHandler) {
         MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
+        float loadFActor = getDefaultLoadFactor();
 
-        float loadFActor = 0.3f;
         int initialSize = (int) (cacheSize/loadFActor);
         LinkedByteArrayRefHeap sharedBaHeap = new LinkedByteArrayRefHeap(cacheSize,8);
         MaxSizeLinkedByteArrayHashMap bamap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFActor,
@@ -80,4 +79,12 @@ public class DataSourceWithLinkedBACache extends DataSourceWithCacheAndStats {
 
         return list;
     }
+
+    // It seems that load factors below 0.3f do not increase the speed
+    // much. With 0.3f, the average key-hashes per lookup is 1.1.
+    // With 0.1f, it is 1.05, only a 5% difference.
+    static public float getDefaultLoadFactor() {
+        return 0.3f;
+    }
+
 }

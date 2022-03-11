@@ -8,12 +8,12 @@ import java.io.FileWriter;
 import java.io.IOException;
 
 public class Benchmark {
-    long startMbs;
-    long started;
-    long elapsedTime;
+    public long startMbs;
+    public long started;
+    public long elapsedTime;
 
-    long ended;
-    long endMbs;
+    public long ended;
+    public long endMbs;
     String logName;
     FileWriter myWriter;
 
@@ -23,6 +23,7 @@ public class Benchmark {
         long usedMemoryMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
         log("Memory used now [MB]: " + usedMemoryMbs);
     }
+
     public void start(boolean showMem) {
         long usedMemoryMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
         startMbs = usedMemoryMbs;

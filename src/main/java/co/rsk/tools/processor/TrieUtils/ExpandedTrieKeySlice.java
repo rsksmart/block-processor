@@ -8,8 +8,8 @@ import java.util.Arrays;
  */
 public class ExpandedTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
     private final byte[] expandedKey;
-    private final int offset;
-    private final int limit;
+    private  int offset;
+    private  int limit;
 
     private ExpandedTrieKeySlice(byte[] expandedKey, int offset, int limit) {
         this.expandedKey = expandedKey;
@@ -67,16 +67,44 @@ public class ExpandedTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
         return new ExpandedTrieKeySlice(expandedKey, newOffset, newLimit);
     }
 
-    public TrieKeySlice commonPath(TrieKeySlice other) {
+    public void selfSlice(int from, int to) {
+        if (from < 0) {
+            throw new IllegalArgumentException("The start position must not be lower than 0");
+        }
+
+        if (from > to) {
+            throw new IllegalArgumentException("The start position must not be greater than the end position");
+        }
+
+        int newOffset = offset + from;
+        if (newOffset > limit) {
+            throw new IllegalArgumentException("The start position must not exceed the key length");
+        }
+
+        int newLimit = offset + to;
+        if (newLimit > limit) {
+            throw new IllegalArgumentException("The end position must not exceed the key length");
+        }
+        this.offset = newOffset;
+        this.limit =  newLimit;
+
+
+    }
+
+    public int getCommonPathLength(TrieKeySlice other) {
         int maxCommonLengthPossible = Math.min(length(), other.length());
         for (int i = 0; i < maxCommonLengthPossible; i++) {
             if (get(i) != other.get(i)) {
-                return slice(0, i);
+                return i;
             }
         }
 
-        return slice(0, maxCommonLengthPossible);
+        return maxCommonLengthPossible;
     }
+
+    public TrieKeySlice commonPath(TrieKeySlice other) {
+        return slice(0, getCommonPathLength(other));
+     }
 
     /**
      * Rebuild a shared path as [...this, implicitByte, ...childSharedPath]

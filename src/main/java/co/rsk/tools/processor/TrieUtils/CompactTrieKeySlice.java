@@ -2,13 +2,17 @@ package co.rsk.tools.processor.TrieUtils;
 
 //import co.rsk.trie.PathEncoder;
 
+import org.ethereum.util.ByteUtil;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 
 public class CompactTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
     // Always store in maximally expanded format
     private final byte[] compactKey;
-    private final short offset;
-    private final short limit;
+    private short offset;
+    private short limit;
 
     public CompactTrieKeySlice(byte[] compactKey, int offset, int limit) {
         this.compactKey = compactKey;
@@ -49,6 +53,29 @@ public class CompactTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
         return PathEncoder.recode(compactKey, offset, length(),length());
     }
 
+    public void selfSlice(int from, int to) {
+
+        if (from < 0) {
+            throw new IllegalArgumentException("The start position must not be lower than 0");
+        }
+
+        if (from > to) {
+            throw new IllegalArgumentException("The start position must not be greater than the end position");
+        }
+        short newOffset = (short) (offset + from);
+        if (newOffset > limit) {
+            throw new IllegalArgumentException("The start position must not exceed the key length");
+        }
+
+        short newLimit = (short) (offset + to);
+        if (newLimit > limit) {
+            throw new IllegalArgumentException("The end position must not exceed the key length");
+        }
+        this.offset = (short) newOffset;
+        this.limit = (short) newLimit;
+        //
+
+    }
     public TrieKeySlice slice(int from, int to) {
         if (from==to) // SDL performance fix
             return empty();
@@ -74,7 +101,7 @@ public class CompactTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
         return new CompactTrieKeySlice(compactKey, newOffset, newLimit);
     }
 
-    public TrieKeySlice commonPath(CompactTrieKeySlice other) {
+    public TrieKeySlice commonPath1(CompactTrieKeySlice other) {
         short maxCommonLengthPossible = (short) Math.min(length(), other.length());
         for (int i = 0; i < maxCommonLengthPossible; i++) {
             if (get(i) != other.get(i)) {
@@ -86,7 +113,84 @@ public class CompactTrieKeySlice implements TrieKeySlice, TrieKeySliceFactory {
         return slice((short) 0, maxCommonLengthPossible);
     }
 
+    public TrieKeySlice commonPath(CompactTrieKeySlice other) {
+        int c = getCommonPathLength(other);
+        return slice(0, c);
+    }
+
+    public int getCommonPathLength(TrieKeySlice other) {
+      return getCommonPathLength( (CompactTrieKeySlice) other);
+    }
+
+    public int getCommonPathLength(CompactTrieKeySlice other) {
+        short maxCommonLengthPossible = (short) Math.min(length(), other.length());
+        int ofs =0;
+
+
+        while (true) {
+            int rest = maxCommonLengthPossible-ofs;
+            if (rest<2) break; // faster bit-by-bit
+
+            if (rest>57)
+                rest = 57;
+            long a = getBitSeqAsLong(compactKey,offset +ofs,rest);
+            long b = getBitSeqAsLong(other.compactKey,other.offset +ofs,rest);
+            if (a!=b)
+                break; // go to the bit level
+            ofs +=rest;
+        }
+
+        for (int i = ofs; i < maxCommonLengthPossible; i++) {
+
+            int ax = get(i);
+            int bx = other.get(i);
+
+            if (ax != bx) {
+                return i+ofs;
+            }
+        }
+
+
+        return maxCommonLengthPossible;
+    }
+
+    /*
+     * bytes: byte array, with the bits indexed from 0 (MSB) to (bytes.length * 8 - 1) (LSB)
+     * offset: index of the MSB of the bit sequence.
+     * len: length of bit sequence, must from range [0,16].
+     * Not checked for overflow
+     */
+
+    static long getBitSeqAsLong(byte[] bytes, int offset, int len){
+
+        int byteIndex = offset / 8;
+        int bitIndex = offset % 8;
+        long val =0;
+        int add =0;
+        int count =0;
+        int bitsNeeded = len+bitIndex;
+        while (bitsNeeded>0) {
+            val = (val<<8) | (bytes[byteIndex] & 0xFF);
+            add +=8;
+            bitsNeeded -=8;
+            byteIndex++;
+            count++;
+        }
+        if (count>8)
+            throw new RuntimeException("cannot pack more than 8 bytes");
+
+        long mask = (1L<<len)-1;
+        int remove = (add-bitIndex-len);
+        val = (val  >> remove) & mask;
+        return val;
+    }
+
+
     public TrieKeySlice commonPath(TrieKeySlice other) {
+        return commonPath((CompactTrieKeySlice) other);
+    }
+
+    public TrieKeySlice commonPath2(TrieKeySlice other) {
         int maxCommonLengthPossible = Math.min(length(), other.length());
         for (int i = 0; i < maxCommonLengthPossible; i++) {
             if (get(i) != other.get(i)) {

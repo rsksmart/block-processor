@@ -832,8 +832,15 @@ public class Trie {
         return find(TrieKeySliceFactoryInstance.get().fromKey(key));
     }
 
+    public Trie findReuseSlice(byte[] key) {
+        return findReuseSlice(TrieKeySliceFactoryInstance.get().fromKey(key));
+    }
 
     private Trie find(TrieKeySlice key) {
+        // 2 keyslice objects created per find() level in the tree
+        // one for key.commonPath(sharedPath)
+        // another for key.slice(commonPathLength + 1, key.length())
+        // I wonder if I can do without them by re-using a slice.
         if (sharedPath.length() > key.length()) {
             return null;
         }
@@ -853,6 +860,32 @@ public class Trie {
         }
 
         return node.find(key.slice(commonPathLength + 1, key.length()));
+    }
+
+    public Trie findReuseSlice(TrieKeySlice key) {
+        // 2 keyslice objects created per find() level in the tree
+        // one for key.commonPath(sharedPath)
+        // another for key.slice(commonPathLength + 1, key.length())
+        // I wonder if I can do without them by re-using a slice.
+        if (sharedPath.length() > key.length()) {
+            return null;
+        }
+
+        int commonPathLength = key.getCommonPathLength(sharedPath);
+        if (commonPathLength < sharedPath.length()) {
+            return null;
+        }
+
+        if (commonPathLength == key.length()) {
+            return this;
+        }
+
+        Trie node = this.retrieveNode(key.get(commonPathLength));
+        if (node == null) {
+            return null;
+        }
+        key.selfSlice(commonPathLength + 1, key.length());
+        return node.findReuseSlice(key);
     }
 
     private void serializeToByteBuffer(ByteBuffer buffer ) {

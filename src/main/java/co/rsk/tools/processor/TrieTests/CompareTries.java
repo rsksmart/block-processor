@@ -3,20 +3,29 @@ package co.rsk.tools.processor.TrieTests;
 
 import co.rsk.core.types.ints.Uint24;
 import co.rsk.crypto.Keccak256;
+import co.rsk.tools.crypto.cryptohash.KeccakNative;
 import co.rsk.tools.processor.TrieTests.Unitrie.*;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
+import co.rsk.tools.processor.TrieTests.ohard.HardEncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.oheap.LongEOR;
 import co.rsk.tools.processor.TrieTests.oheap.EncodedObjectHeap;
 import co.rsk.tools.processor.TrieTests.orefheap.EncodedObjectRefHeap;
+import co.rsk.tools.processor.TrieUtils.CompactTrieKeySlice;
+import co.rsk.tools.processor.TrieUtils.CompactTrieKeySliceTest;
 import co.rsk.tools.processor.TrieUtils.ExpandedTrieKeySlice;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
-import org.ethereum.datasource.DataSourceWithCache;
+import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.datasource.LevelDbDataSource;
 import org.ethereum.util.ByteUtil;
+
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -35,18 +44,28 @@ public class CompareTries extends Benchmark {
         MaxSizeLinkedByteArrayHashMap
     }
 
+    boolean flushFilesystemCache = true;
     HashMapDataStructure hashMapDataStructure =
+     //       HashMapDataStructure.NoCache;
     //        HashMapDataStructure.NoCache;
             HashMapDataStructure.MaxSizeHashMap;
     //HashMapDataStructure.MaxSizeLinkedByteArrayHashMap;
     // HashMapDataStructure.MaxSizeByteArrayHashMap;
 
+    static Class<? extends EncodedObjectStore> encodedStoreClass =
+            null;
+       // SoftRefEncodedObjectStore.class;
+        //EncodedObjectHeap.class;
+        //EncodedObjectHashMap.class;
+            //HardEncodedObjectStore.class;
+        //MultiSoftEncodedObjectStore.class;
+        //EncodedObjectRefHeap.class;
 
     final int flushNumberOfBlocks =1000;
     // Each write to store takes 20K gas, which means that each block with 6.8M gas
     // can perform 340 writes.
     //
-    final int writesPerBlock = 340;
+    int writesPerBlock = 340;
 
     // 6.8M / 200 = 34K
     // Cost of read is 200 right now in RSK.
@@ -120,6 +139,28 @@ public class CompareTries extends Benchmark {
 
     KeyValueDataSource dsDB;
 
+    protected Class<? extends DataSourceWithCacheAndStats> getDSClass() {
+        if (hashMapDataStructure==HashMapDataStructure.MaxSizeCAHashMap)
+            return DataSourceWithCACache.class;
+        else
+        if (hashMapDataStructure==HashMapDataStructure.MaxSizeHashMap)
+            return DataSourceWithCacheAndStats.class;
+         else
+        if (hashMapDataStructure==HashMapDataStructure.MaxSizeByteArrayHashMap)
+        {
+            return DataSourceWithBACache.class;
+              }
+        else
+        if (hashMapDataStructure==HashMapDataStructure.MaxSizeLinkedByteArrayHashMap)
+        {
+            return DataSourceWithLinkedBACache.class;
+             } else
+        if (hashMapDataStructure==HashMapDataStructure.NoCache) {
+            return DataSourceWithCacheAndStats.class;
+
+        } else
+            return null;
+    }
     // This emulares rskj store building
     protected TrieStore buildTrieStore(Path trieStorePath,boolean deleteIfExists,boolean abortIfExists) {
         int statesCacheSize;
@@ -203,7 +244,7 @@ public class CompareTries extends Benchmark {
     public void prepare() {
         // in satoshis
         // 0.1 bitcoin
-        TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
+        //TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
 
         stateTrieSim.setSimMode(testMode);
         computeAverageAccountSize();
@@ -394,9 +435,10 @@ public class CompareTries extends Benchmark {
             pseudoRandom.fillRandomBytes(key,stateTrieSim.fixKeySize,stateTrieSim.varKeySize);
             byte[] value = TestUtils.getPseudoRandom().randomBytes(stateTrieSim.valueSize);
             rootNode = rootNode.put(key, value);
-            if (i % writesPerBlock==0) {
-                simulateNewBlock(true);
-
+            if (writesPerBlock>0) {
+                if (i % writesPerBlock == writesPerBlock - 1) {
+                    simulateNewBlock(true);
+                }
             }
             if (i % 100000 == 0) {
                 dumpProgress(i,max);
@@ -435,8 +477,9 @@ public class CompareTries extends Benchmark {
 
 
         blocksCreated++;
-        if (blocksCreated % flushNumberOfBlocks==0)
-            flushTrie();
+        if (sSaveTrie)
+            if (blocksCreated % flushNumberOfBlocks==0)
+                flushTrie();
     }
 
    public boolean shouldRunGC() {
@@ -478,78 +521,111 @@ public class CompareTries extends Benchmark {
             log("fixedKeyPart: "+ByteUtil.toHexString(fixedKeyPart));
         }
     }
-
-    public void existentReadNodes(Trie t,boolean includeTopDownKeys) {
+    // For 1M leaf nodes, maximum read throughput is:
+    // Read existent leaf nodes/sec: 94589
+    // when all elements are in the cache.
+    public void existentReadNodes(Trie t,boolean includeTopDownKeys,long maxReads,int passes,
+                                  boolean destroyTreeOnNewBlock,
+                                  boolean destroyTreeAfterEachLookup) {
         byte[][] keys = null;
-        boolean preloadKeys = false;
+        boolean preloadKeys = passes>1;
         boolean sequentialKeys = false;
         long sequentialBase = maxKeysBottomUp;
         boolean x = false;
         if (x)
             return;
 
+        boolean visual = passes<=1;
+
         computeFixedKeyPart();
         showCacheStats();
 
+        int totalKeys =(int) (maxKeysBottomUp );
+        if (includeTopDownKeys)
+            totalKeys += (int) (maxKeysTopDown);
+
+        if (maxReads==0)
+            maxReads = 1_000_000;
+        long totalReads = maxReads*passes;
+        logNewSection("random existent key read...("+totalReads+")");
 
         if (preloadKeys) {
-            keys = new byte[(int) (maxKeysTopDown + maxKeysBottomUp)][];
+            log("Preloading keys");
+            // Force the sequence of pseudo-random elements to be always the same.
+            TestUtils.getPseudoRandom().setSeed(1);
+
+            keys = new byte[(int) (totalKeys)][];
             for (int i = 0; i < keys.length; i++) {
-                byte[] key = getExistentRandomKey();
+                byte[] key;
+                if (sequentialKeys)
+                    key = getExistentKey((i + sequentialBase) % totalKeys);
+                else
+                    key = getExistentRandomKey();
                 keys[i] = key;
             }
         }
         started = System.currentTimeMillis();
         // now we count something
 
-        logNewSection("random existent key read...");
-
-        long maxReads = 1_000_000;
         int found=0;
 
         boolean debugQueries = false;
-        int totalKeys =(int) (maxKeysBottomUp );
-        if (includeTopDownKeys)
-             totalKeys += (int) (maxKeysTopDown);
 
-        for(int i=0;i<maxReads;i++) {
-            if (i % readsPerBlock==0) {
-                simulateNewBlock(false);
-            }
-            if (i % 50000==0)
-                System.out.println("iteration: "+i);
-            byte[] key;
 
-            if (sequentialKeys)
-                key = getExistentKey((i+sequentialBase) % totalKeys);
-            else
-            if (preloadKeys)
-                key = keys[i % keys.length];
-            else {
-                key = getExistentRandomKey();
-            }
-            if (i<3) {
-                log(""+i+": fetching "+ByteUtil.toHexString(key));
-            }
-            if (debugQueries) {
-                TrieKeySlice eks = ExpandedTrieKeySlice.getFactory().
-                        fromEncoded(key, 0, key.length * 8);
-                System.out.println("look for key: " + eks.toString());
-                System.out.println("iter: "+i+" key: "+ByteUtil.toHexString(key));
-            }
-            if (t.find(key)==null) {
-                System.out.println("error: "+i+" key: "+ByteUtil.toHexString(key));
-                System.exit(1);
-            }
+        log("destroyTreeOnNewBlock: "+destroyTreeOnNewBlock);
+        log("destroyTreeAfterEachLookup: "+destroyTreeAfterEachLookup);
 
+        for(int p=0;p<passes;p++) {
+
+            // Force the sequence of pseudo-random elements to be always the same.
+            TestUtils.getPseudoRandom().setSeed(1);
+
+            for (int i = 0; i < maxReads; i++) {
+                if (destroyTreeOnNewBlock) {
+                    if (i % readsPerBlock == readsPerBlock-1) {
+                        simulateNewBlock(false);
+                    }
+                }
+                if (visual) {
+                    if (i % 50000 == 0)
+                        System.out.println("iteration: " + i);
+                }
+                byte[] key;
+
+                if (sequentialKeys)
+                    key = getExistentKey((i + sequentialBase) % totalKeys);
+                else if (preloadKeys)
+                    key = keys[i % keys.length];
+                else {
+                    key = getExistentRandomKey();
+                }
+                if ((visual) && (i < 3)) {
+                    log("" + i + ": fetching " + ByteUtil.toHexString(key));
+                }
+                if (debugQueries) {
+                    TrieKeySlice eks = ExpandedTrieKeySlice.getFactory().
+                            fromEncoded(key, 0, key.length * 8);
+                    System.out.println("look for key: " + eks.toString());
+                    System.out.println("iter: " + i + " key: " + ByteUtil.toHexString(key));
+                }
+                if (t.findReuseSlice(key) == null) {
+                    System.out.println("error: " + i + " key: " + ByteUtil.toHexString(key));
+                    System.exit(1);
+                }
+                if (destroyTreeAfterEachLookup) {
+                    destroyTree();
+                }
+            }
         }
-        log("numExistentReads: "+maxReads);
+        log("maxReads: "+maxReads);
+        log("passes: "+passes);
+        log("totalReads: "+totalReads);
 
         ended = System.currentTimeMillis();
         long elapsedTimeMs = (ended - started);
         log("Elapsed time [ms]: " + elapsedTimeMs);
         if (elapsedTimeMs!=0) {
-            randomExistentReadsPerSecond =(maxReads * 1000 / elapsedTimeMs);
+            randomExistentReadsPerSecond =(totalReads * 1000 / elapsedTimeMs);
             log("Read existent leaf nodes/sec: " + randomExistentReadsPerSecond);
 
         }
@@ -902,6 +978,28 @@ public class CompareTries extends Benchmark {
         }
     }
 
+    public float getExpectedLoadFactor() {
+        // This is ugly and I'm sure there is a better way to do it
+        // but I don't know.
+        Class cls =getDSClass();
+        Method m = null;
+        try {
+            m = cls.getMethod("getDefaultLoadFactor");
+        } catch (NoSuchMethodException e) {
+            return 0;
+        }
+        String[] params = null;
+        Object ret = null;
+        try {
+            ret = m.invoke(null, (Object[]) null);
+        } catch (IllegalAccessException e) {
+            return 0;
+        } catch (InvocationTargetException e) {
+            return 0;
+        }
+        return (Float) ret;
+
+    }
 
     public void createLogFile(String basename,String expectedItems) {
             String name = "Results/"+basename;
@@ -917,6 +1015,8 @@ public class CompareTries extends Benchmark {
             name = name +"-Max_"+ getMillions( Runtime.getRuntime().maxMemory());
             name = name +"-"+hashMapDataStructure.toString();
             name = name + "-SCS_"+getK(statesCacheSize);
+            name = name + "-lf_"+getExpectedLoadFactor();
+            //name = name + "-lf_"+dsWithCache.getDefaultLoadFactor();
             //name = name + dsWithCache.getModifiers();
 
             Date date = Calendar.getInstance().getTime();
@@ -946,7 +1046,7 @@ public class CompareTries extends Benchmark {
     }
 
     static public Class<? extends EncodedObjectStore> chooseEncodedStoreClass() {
-        return null; // Do not use a encoded store
+        return encodedStoreClass; // Do not use a encoded store
         //encodedObjectStore = new SoftRefEncodedObjectStore();
         //encodedObjectStore = new EncodedObjectHeap();
         //encodedObjectStore = new EncodedObjectHashMap();
@@ -1002,8 +1102,8 @@ public class CompareTries extends Benchmark {
     public void setupGlobalClasses(EncodedObjectStore encodedObjectStore) {
         GlobalEncodedObjectStore.set(encodedObjectStore);
         //EncodedObjectHeap.default_spaceMegabytes = 500;
-        //TrieKeySliceFactoryInstance.setTrieKeySliceFactory(CompactTrieKeySlice.getFactory());
-        TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
+        TrieKeySliceFactoryInstance.setTrieKeySliceFactory(CompactTrieKeySlice.getFactory());
+        //TrieKeySliceFactoryInstance.setTrieKeySliceFactory(ExpandedTrieKeySlice.getFactory());
     }
 
     public void logGlobalClasses() {
@@ -1099,26 +1199,62 @@ public class CompareTries extends Benchmark {
         }
     }
 
+    void logMaxKeys() {
+        log("maxKeysBottomUp: "+maxKeysBottomUp);
+        log("maxKeysTopDown: "+maxKeysTopDown);
+    }
+
+    public void checkFlushFilesystemCache() {
+        if (flushFilesystemCache) {
+            System.out.println("-----------------------------------------");
+            System.out.println("Now you have to execute 'sudo purge' in your shell");
+            System.out.println("-----------------------------------------");
+            System.out.println("Press [ENTER] afterwards..");
+
+            //String enter = System.console().readLine();
+            // Enter data using BufferReader
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(System.in));
+
+            // Reading data using readLine
+            try {
+                String name = reader.readLine();
+            } catch (IOException e) {
+                System.out.println("error in stdin");
+            }
+            log("sudo purge performed");
+        } else {
+            log("NO filesystenm cache purge performed");
+        }
+    }
+
     // Requires that the database is already loaded with all the data
     public void readTest(Class<? extends EncodedObjectStore> aClass) {
         testMode = StateTrieSimulator.SimMode.simEOAs;
-        maxKeysBottomUp  = 1L * (1 << 20);
-        maxKeysTopDown = 1L * (1 << 20)/2; // total: 1.5M
+        maxKeysBottomUp  = 0;//1L * (1 << 20);
+        maxKeysTopDown = 1L * (1 << 20);//1L * (1 << 20)/2; // total: 1.5M
         long totalKeys = maxKeysBottomUp+maxKeysTopDown;
 
+        writesPerBlock =0;
         String dbName = testMode.toString()+""+maxKeysBottomUp+"plus"+maxKeysTopDown;
+        dbName = dbName + "-wpb_"+writesPerBlock;
+
         String testName ="readtest";
         String maxStr = "";
 
         setupEncodedObjectStore(aClass);
         prepare();
-        computeBottomUpBitSizes(maxKeysBottomUp);
+        if (maxKeysBottomUp>0)
+            computeBottomUpBitSizes(maxKeysBottomUp);
+        createLogFile(testName,maxStr);
+        logMaxKeys();
+        checkFlushFilesystemCache();
         openTrieStore(false,false,dbName);
+        logGlobalClasses();
         dsWithCache.readOnly = true;
         setRootNode(null);
         getTrieStore();
-        createLogFile(testName,maxStr);
-        logGlobalClasses();
+
         readTestInternal();
         dumpResultsInCSV();
         closeLog();
@@ -1140,34 +1276,98 @@ public class CompareTries extends Benchmark {
 
     public void readTestInternal() {
         long testCacheLimit = 1_000_000;
+        boolean countNodes = false;
+        if (countNodes) {
+            countNodes("TD: ", rootNode, 0, true);
+            showHashtableStats();
+            // It's very important to destroy the tree in memory to get
+            // a real measurement of how the cache works
+            destroyTreeAndLog();
+            countNodes("CacheTest: PASS 1: ", rootNode, testCacheLimit, false);
+            destroyTreeAndLog();
 
-        countNodes("TD: ", rootNode, 0, true);
-        showHashtableStats();
-        // It's very important to destroy the tree in memory to get
-        // a real measurement of how the cache works
-        destroyTreeAndLog();
-        countNodes("CacheTest: PASS 1: ", rootNode, testCacheLimit, false);
-        destroyTreeAndLog();
+            // It's possible that when scanning, items are moved to the top, which
+            // causes items to be evicted? We disconnect this mechanism to test this
+            // hypothesis
+            boolean oldAccess = getCacheTopPriorityOnAccess();
+            setCacheTopPriorityOnAccess(false);
+            countNodes("CacheTest: PASS 2: ", rootNode, testCacheLimit, false);
+            setCacheTopPriorityOnAccess(oldAccess);
 
-        // It's possible that when scanning, items are moved to the top, which
-        // causes items to be evicted? We disconnect this mechanism to test this
-        // hypothesis
-        boolean oldAccess = getCacheTopPriorityOnAccess();
-        setCacheTopPriorityOnAccess(false);
-        countNodes("CacheTest: PASS 2: ", rootNode, testCacheLimit, false);
-        setCacheTopPriorityOnAccess(oldAccess);
+            showUsedMemory();
+        }
+        // Si elimino los destroy trees de los newblocks llego a 313K bloques/sec
+        // aun asi es mucho menos de los 800K bloques/sec que logra el Ethereum trie
+        // Pienso que pueden ser 2 cosas: o los key paths que se estan verificando de a 1
+        // bit, o .... tal vez simplemente que hay mas nodos que recorrer ?
+        // Test two all in cache
+        long maxExistentReads = 300_000;
+        int passes = 10;
+        //existentReadNodes(rootNode,true,maxExistentReads,1,false,false);
+        //existentReadNodes(rootNode,true,maxExistentReads,passes,true,false);
 
-        showUsedMemory();
 
-        existentReadNodes(rootNode, true);
-        randomReadNodes(rootNode, 0);
+
+        if (flushFilesystemCache) {
+            // This test is about raw in-memory trie lookup. It's not realistic, because
+            // most of the nodes are not in the memory trie, nor in the in-memory cache,
+            // but on SSD DB.
+            log("Test: SSD DB retrieval to build full trie, without filesystem cache");
+            existentReadNodes(rootNode,true,maxExistentReads,1,false,false);
+
+            log("Clearing all application caches");
+            destroyTree();
+            dsWithCache.clear();
+            dsWithCache.resetHitCounters();
+
+            // Now we test again, but we assume filesystem caches will be filled.
+            // So we clean all application caches.
+            log("Test: SSD DB retrieval to build full trie, with filesystem caches");
+            existentReadNodes(rootNode, true, maxExistentReads, 1, false, false);
+        } else {
+            // This test is about raw in-memory trie lookup. It's not realistic, because
+            // most of the nodes are not in the memory trie, nor in the in-memory cache,
+            // but on SSD DB.
+            log("Test: SSD DB retrieval to build full trie (unknown filesystem cache state)");
+            existentReadNodes(rootNode,true,maxExistentReads,1,false,false);
+
+        }
+
+        // This test is about raw in-memory trie lookup. It's not realistic, because
+        // most of the nodes are not in the memory trie, nor in the in-memory cache,
+        // but on SSD DB.
+        log("Test: in-memory built trie");
+        existentReadNodes(rootNode,true,maxExistentReads,passes,false,false);
+
+        // This test is about in-memory node cache lookup. It's too not realistic, because
+        // most of the nodes are not in the in-memory cache,
+        // but on SSD DB.
+        // The pre-condition of this test is that all nodes are in the cache.
+        // This is satisfied by the first existentReadNodes() call, which loads them all.
+        log("Test: in-memory cache");
+        destroyTree();
+        existentReadNodes(rootNode,true,maxExistentReads,passes,false,true);
+
+        // This test is more realistic. It mantains some portion of the tree built in-memory
+        // and goes to fetch nodes from the cache.
+        log("Test: Keeping trie built during block execution");
+        existentReadNodes(rootNode,true, maxExistentReads,passes,true,false);
+
+        if (false) {
+            // The idea of this test is to be 100% realistic:
+            // * some nodes are retrieved from cache
+            // * some nodes are fetched from disk.
+            // * some part of the tree is in memory (while processing a block)
+            existentReadNodes(rootNode, true, 0, 1,true,false);
+            randomReadNodes(rootNode, 0);
+        }
         logTraceInfo();
     }
 
     public void writeTest(Class<? extends EncodedObjectStore> aClass) {
         testMode = StateTrieSimulator.SimMode.simEOAs;
-        long addMaxKeysBottomUp  = 1L * (1 << 20);
-        long addMaxKeysTopDown = 1L * (1 << 20)/2; // total: 1.5M
+        long addMaxKeysBottomUp  = 0; //1L * (1 << 20);
+        long addMaxKeysTopDown = 1L * (1 << 20);//1L * (1 << 20)/2; // total: 1.5M
 
         String testName ="writetest";
         String maxStr = ""+ getMillions(addMaxKeysBottomUp )+" plus "+getMillions(addMaxKeysTopDown);
@@ -1176,6 +1376,7 @@ public class CompareTries extends Benchmark {
         setupEncodedObjectStore(aClass);
         prepare();
         writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,"");
+        showCacheStats();
         dumpResultsInCSV();
         closeLog();
     }
@@ -1189,8 +1390,9 @@ public class CompareTries extends Benchmark {
         // To be able to reconstruct existing kety, we need to know how many
         // keys are top-down and how many are bottom-up
         long totalKeys = addMaxKeysBottomUp+addMaxKeysTopDown;
-
+        writesPerBlock = 0;
         String dbName = testMode.toString()+""+tmpDbNamePrefix+addMaxKeysBottomUp+"plus"+addMaxKeysTopDown;
+        dbName = dbName + "-wpb_"+writesPerBlock;
 
         if (tmpDbNamePrefix.length()>0) {
             // Temporary DB. Can delete freely
@@ -1215,7 +1417,7 @@ public class CompareTries extends Benchmark {
             destroyTreeAndLog();
             showUsedMemory();
 
-            existentReadNodes(rootNode, false);
+            existentReadNodes(rootNode, false,0,1,false,false);
             countNodes("BU: ", rootNode, 0, true);
 
             showHashtableStats();
@@ -1359,7 +1561,7 @@ public class CompareTries extends Benchmark {
         //
 
         buildByInsertion();
-        existentReadNodes(rootNode,true);
+        existentReadNodes(rootNode,true,0,1,false,false);
         countNodes("",rootNode,0,true);
         randomReadNodes(rootNode,0);
         dumpResultsInCSV();
@@ -1477,14 +1679,74 @@ public class CompareTries extends Benchmark {
         return node;
     }
 
+    public void testKeccak() {
+        KeccakNative kn = new KeccakNative();
+        byte[] test = new byte[100_000];
+        int max = 10_000;
+        byte[] d256 = co.rsk.tools.crypto.Keccak256Helper.keccak256java(test,0,test.length);
+        System.out.println("digest10: "+ByteUtil.toHexString(d256));
+
+
+        byte[] d10 = co.rsk.tools.crypto.Keccak256Helper.keccak80(test,0,test.length);
+        System.out.println("digest10: "+ByteUtil.toHexString(d10));
+
+        byte[] digest = kn.digest(test);
+        System.out.println("digest native: "+ByteUtil.toHexString(digest));
+        digest = Keccak256Helper.keccak256(test);
+        System.out.println("digest java: "+ByteUtil.toHexString(digest));
+        //System.exit(0);
+        long start;
+        long time;
+        long end;
+
+
+        start = System.currentTimeMillis();
+        for (int i=0;i<max;i++) {
+            byte[] digest3 = co.rsk.tools.crypto.Keccak256Helper.keccak80(test,0,test.length);
+        }
+        end = System.currentTimeMillis();
+        time = end-start;
+        System.out.println("d10 java time [ms]: "+time);
+
+        start = System.currentTimeMillis();
+        for (int i=0;i<max;i++) {
+            byte[] digest3 = co.rsk.tools.crypto.Keccak256Helper.keccak256(test,0,test.length);
+        }
+        end = System.currentTimeMillis();
+        time = end-start;
+        System.out.println("d256 java time [ms]: "+time);
+
+
+        start = System.currentTimeMillis();
+        for (int i=0;i<max;i++) {
+            byte[] digest3 = Keccak256Helper.keccak256(test);
+        }
+        end = System.currentTimeMillis();
+        time = end-start;
+        System.out.println("java time [ms]: "+time);
+
+
+        start = System.currentTimeMillis();
+        for (int i=0;i<max;i++) {
+            byte[] digest2 = kn.digest(test);
+        }
+        end = System.currentTimeMillis();
+        time = end-start;
+        System.out.println("native time [ms]: "+time);
+
+        System.exit(0);
+    }
+
     public static void main (String args[]) {
+        CompactTrieKeySliceTest.test_getBitSeqAsInt();
         CompareTries c = new CompareTries();
+        //c.testKeccak();
         //c.topdownTest();
         //c.buildbottomUp();
         //c.smallWorldTest();
         //c.seedTest();
-        //c.writeTest();
-        c.readTest();
+        c.writeTest();
+        //c.readTest();
         //c.microWorldTest(chooseEncodedStore());
         System.exit(0);
     }
