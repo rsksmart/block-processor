@@ -216,7 +216,7 @@ public class PseudoRandom {
             }
         }
     }
-
+    // first bit is always MSB
     public  static void  moveBits(byte[] buf, int baseSrcOfs, byte[] result, int baseDstOfs,int bitlength) {
         for (int i = 0; i < bitlength; i++) {
             int srcofs = (baseSrcOfs + i) >> 3;

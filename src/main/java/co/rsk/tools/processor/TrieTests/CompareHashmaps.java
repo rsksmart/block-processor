@@ -6,15 +6,51 @@ import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
 import co.rsk.util.MaxSizeHashMap;
 import org.ethereum.db.ByteArrayWrapper;
 
-import java.util.AbstractMap;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 public class CompareHashmaps extends Benchmark {
 
+    DataStructure testDataStructure =
+            DataStructure.MaxSizeLinkedByteArrayHashMap;
+            //DataStructure.MaxSizeHashMap;
+
+    enum DataStructure {
+        CAHashMap,
+        HashMap,
+        LinkedHashMap,
+        LinkedCAHashMap,
+        NumberedCAHashMap,
+        MaxSizeHashMap,
+        MaxSizeCAHashMap,
+        ByteArrayHashMap,
+        PrioritizedByteArrayHashMap,
+        MaxSizeMetadataLinkedByteArrayHashMap,
+        MaxSizeLinkedByteArrayHashMap
+    }
+
     StateTrieSimulator stateTrieSim = new StateTrieSimulator();
+
+    boolean limitSize = false;
+
+    public void createLogFile(String basename,String expectedItems) {
+        String name = "HashmapsResults/"+basename;
+        name = name + "-"+testDataStructure.toString();
+        name = name + "-"+expectedItems;
+
+        name = name +"-MemMax_"+ getMillions( Runtime.getRuntime().maxMemory());
+
+
+        Date date = Calendar.getInstance().getTime();
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH.mm.ss");
+        String strDate = dateFormat.format(date);
+        name = name + "-"+ strDate;
+
+        plainCreateLogFilename(name);
+    }
 
     public void computeAverageAccountSize() {
         stateTrieSim.setSimMode(StateTrieSimulator.SimMode.simEOAs);
@@ -22,19 +58,19 @@ public class CompareHashmaps extends Benchmark {
         log("Average account size: "+stateTrieSim.accountSize);
     }
 
+    int vmax = 9_000_000;
+    int maxSize = vmax;
+    int avgAccountPathSize;
+    int avgLeafNodeSize;
+    int nonEmbeddedNodeSize;
 
-    ///////////////////////////////////////////////////////////////////////
-    // testHashmapReplacement()
-    // This is my second approach to optimizing the trie.
-    // Instead of keeping the tree structured in memory, the idea is to
-    // simply replace the hashmap used for the committed elements in
-    // DataSourceWithCache with a more efficient hashmap that provides
-    // faster put() and get(), and as a tradeoff, it provides slower
-    // operations such as iteration or entrySet() or keySet() which are
-    // not needed.
-    ///////////////////////////////////////////////////////////////////////
-    public void testHashmapReplacement() {
-        TrieCACacheRelation myKeyValueRelation = new TrieCACacheRelation();
+    CAHashMap<ByteArrayWrapper, byte[]> camap =null;
+    AbstractMap<ByteArrayWrapper, byte[]> map=null;
+    CAHashMap<ByteArrayWrapper, TSNode> tsmap=null;
+    TrieCACacheRelation myKeyValueRelation;
+
+    public void prepareHashmap() {
+        myKeyValueRelation = new TrieCACacheRelation();
         // For linear-probing hashmaps, the load factor must be low (i.e. 0.3f)
         // For hashmaps with linked-list or tree buckets, it can be much higher (i.e. 0.75f=
 
@@ -46,17 +82,9 @@ public class CompareHashmaps extends Benchmark {
         // find all hashmaps data structures that are being tested
         // in the DataStructure enum.
         DataStructure testDS;
-        testDS= DataStructure.MaxSizeLinkedByteArrayHashMap; //MaxSizeByteArrayHashMap;
-        //testDS = DataStructure.MaxSizeHashMap;
+        testDS= testDataStructure;
 
         float loadFactor = loadFactorForLinearProbing;
-
-        CAHashMap<ByteArrayWrapper, byte[]> camap =null;
-        AbstractMap<ByteArrayWrapper, byte[]> map=null;
-        CAHashMap<ByteArrayWrapper, TSNode> tsmap=null;
-
-        int vmax = 9_000_000;
-        int maxSize = vmax;
 
         String testClass ="";
         switch (testDS) {
@@ -70,22 +98,28 @@ public class CompareHashmaps extends Benchmark {
                 loadFactor = loadFactorForMultiBuckets;
         }
 
-        System.out.println("loadFactor: "+loadFactor);
+        log("loadFactor: "+loadFactor);
 
-        switch (testDS) {
-            case MaxSizeHashMap:
-            case MaxSizeCAHashMap:
-            case MaxSizeMetadataLinkedByteArrayHashMap:
-            case PrioritizedByteArrayHashMap:
-            case MaxSizeLinkedByteArrayHashMap:
-                maxSize = 1_000_000; // vmax;//+1; //8_000_000;
+        if (limitSize) {
+            switch (testDS) {
+                case MaxSizeHashMap:
+                case MaxSizeCAHashMap:
+                case MaxSizeMetadataLinkedByteArrayHashMap:
+                case PrioritizedByteArrayHashMap:
+                case MaxSizeLinkedByteArrayHashMap:
+                    maxSize = 1_000_000; // vmax;//+1; //8_000_000;
+            }
+            log("maxSize: " + maxSize);
+        } else {
+            // I need to add 1 more to the maxSize because MaxSizeLinkedByteArrayHashMap
+            // will prune nodes 1 put() before  MaxSizeHashMap
+            maxSize = vmax+1;
+            log("no size limit");
         }
-        System.out.println("maxSize: "+maxSize);
-
         int initialSize = (int) (maxSize/loadFactor);
-        System.out.println("initialSize: "+initialSize);
+        log("initialSize: "+initialSize);
 
-        start(true);
+        startMem(true);
         if (testDS== DataStructure.CAHashMap) {
             camap = new CAHashMap<ByteArrayWrapper, byte[]>((int) initialSize, loadFactor, myKeyValueRelation);
             map = camap;
@@ -125,7 +159,7 @@ public class CompareHashmaps extends Benchmark {
         } else
         if (testDS== DataStructure.MaxSizeLinkedByteArrayHashMap) {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
-            LinkedByteArrayRefHeap sharedBaHeap = new LinkedByteArrayRefHeap(maxSize,8);
+            LinkedByteArrayRefHeap sharedBaHeap = new LinkedByteArrayRefHeap(maxSize,0);
             MaxSizeLinkedByteArrayHashMap pmap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFactor,myKR,0,sharedBaHeap,
                     maxSize,true );
             map = pmap;
@@ -152,10 +186,56 @@ public class CompareHashmaps extends Benchmark {
 
         computeAverageAccountSize();
         // Having a million accounts (20 bits)
-        int avgAccountPathSize = (30*8-20)/8;
-        int avgLeafNodeSize = stateTrieSim.accountSize+avgAccountPathSize+1+1;
-        int nonEmbeddedNodeSize = (avgLeafNodeSize+1)*2+3+1;
+        avgAccountPathSize = (30*8-20)/8;
+        avgLeafNodeSize = stateTrieSim.accountSize+avgAccountPathSize+1+1;
+        nonEmbeddedNodeSize = (avgLeafNodeSize+1)*2+3+1;
         log("nonEmbeddedNodeSize: "+nonEmbeddedNodeSize);
+
+        log("Class: "+testClass);
+        log("Test: "+testDS);
+    }
+
+    public void readTest() {
+        log("random read test...");
+        int maxSize = vmax;
+        showPartialMemConsumed = false;
+        start(false);
+        for (int i=0;i<maxSize;i++) {
+            byte[] v1 = new byte[nonEmbeddedNodeSize];
+
+            int x=TestUtils.getPseudoRandom().nextInt(vmax);
+            v1[0] = (byte) (x & 0xff);
+            v1[1] = (byte) ((x >> 8) & 0xff);
+            v1[2] = (byte) ((x >> 16) & 0xff);
+            v1[3] = (byte) ((x >> 24) & 0xff);
+            ByteArrayWrapper k1 = myKeyValueRelation.getKeyFromData(v1);
+            byte[] r;
+            if (tsmap!=null) {
+                TSNode rn;
+                rn = tsmap.get(k1);
+                r = rn.data;
+            } else {
+                if (camap != null)
+                    r =camap.get(k1);
+                else {
+                    r =map.get(k1);
+                }
+            }
+
+            if ((r==null) && (!limitSize)) {
+                log("Element not found index: "+x);
+                System.exit(1);
+            }
+            if (i % 100_0000==0) {
+                dumpProgress(i,vmax);
+            }
+        }
+        stop(false);
+        dumpSpeedResults(maxSize);
+    }
+
+    public void writeTest() {
+        start(false);
 
         for (int i=0;i<vmax;i++) {
             byte[] v1 = new byte[nonEmbeddedNodeSize];
@@ -179,14 +259,14 @@ public class CompareHashmaps extends Benchmark {
                 dumpMemProgress(i,vmax);
                 if ((map!=null) && (map instanceof  ByteArrayHashMap)) {
                     int longest = ((ByteArrayHashMap) map).longestFilledRun();
-                    System.out.println("Hashmap longest filled run: "+longest);
+                    log("Hashmap longest filled run: "+longest);
                 }
             }
         }
+
         stop(true);
         dumpMemResults(vmax);
-        System.out.println("Class: "+testClass);
-        System.out.println("Test: "+testDS);
+
         long consumedMbs = (endMbs - startMbs);
         long consumedBytes = consumedMbs*1000*1000;
         // When using maxSize, the number of actual elements left may be lower than maxSize, because
@@ -194,28 +274,28 @@ public class CompareHashmaps extends Benchmark {
         int finalSize = 0;
 
         if (tsmap!=null) {
-            System.out.println("hashMapCount: " + tsmap.hashMapCount);
-            System.out.println("tsmap.size : " + tsmap.size());
+            log("hashMapCount: " + tsmap.hashMapCount);
+            log("tsmap.size : " + tsmap.size());
             finalSize = tsmap.size();
         } else
         if (camap!=null) {
-            System.out.println("hashMapCount: " + camap.hashMapCount);
-            System.out.println("camap.size : " + camap.size());
+            log("hashMapCount: " + camap.hashMapCount);
+            log("camap.size : " + camap.size());
             finalSize = camap.size();
         } else {
-            System.out.println("HashMap test");
-            System.out.println("map.size : " + map.size());
+            log("HashMap test");
+            log("map.size : " + map.size());
             finalSize = map.size();
         }
-
-        System.out.println("entry size : " + consumedBytes/finalSize);
+        log("nonEmbeddedNodeSize: "+nonEmbeddedNodeSize);
+        log("entry size : " + consumedBytes/finalSize);
         int overhead = (int) (consumedBytes/finalSize-nonEmbeddedNodeSize);
-        System.out.println("entry overhead : " + overhead);
-        System.out.println("entry overhead [%] : " + overhead*100/nonEmbeddedNodeSize+"%");
+        log("entry overhead : " + overhead);
+        log("entry overhead [%] : " + overhead*100/nonEmbeddedNodeSize+"%");
+    }
 
-
-
-        System.out.println("Testing scanning and retrieving (key,data) speed");
+    public void scanTest() {
+        log("Testing scanning and retrieving (key,data) speed");
         start(false);
         int[] counter  = new int[1];
         if (tsmap!=null) {
@@ -226,11 +306,11 @@ public class CompareHashmaps extends Benchmark {
             map.forEach(count);
         }
         stop(false);
-        System.out.println("Counter: "+counter[0]);
+        log("Counter: "+counter[0]);
 
         dumpSpeedResults(maxSize);
 
-        System.out.println("Testing scanning and retrieving (data) only..");
+        log("Testing scanning and retrieving (data) only..");
         if ((map!=null) && (map instanceof  ByteArrayHashMap)) {
             start(false);
             int[] counter2 = new int[1];
@@ -239,12 +319,35 @@ public class CompareHashmaps extends Benchmark {
             ((ByteArrayHashMap) map).forEach(count);
 
             stop(false);
-            System.out.println("Counter2: " + counter2[0]);
+            log("Counter2: " + counter2[0]);
             dumpSpeedResults(maxSize);
         }
 
+    }
+    ///////////////////////////////////////////////////////////////////////
+    // testHashmapReplacement()
+    // This is my second approach to optimizing the trie.
+    // Instead of keeping the tree structured in memory, the idea is to
+    // simply replace the hashmap used for the committed elements in
+    // DataSourceWithCache with a more efficient hashmap that provides
+    // faster put() and get(), and as a tradeoff, it provides slower
+    // operations such as iteration or entrySet() or keySet() which are
+    // not needed.
+    ///////////////////////////////////////////////////////////////////////
+    public void testHashmapReplacement() {
+        String testName;
 
+        testName ="HashmapTest";
+        createLogFile(testName, getMillions( vmax));
+        prepareHashmap();
 
+        writeTest();
+
+        readTest();
+
+        scanTest();
+
+        closeLog();
     }
 
     public static void main (String args[]) {
@@ -254,17 +357,4 @@ public class CompareHashmaps extends Benchmark {
         System.exit(0);
     }
 
-    enum DataStructure {
-        CAHashMap,
-        HashMap,
-        LinkedHashMap,
-        LinkedCAHashMap,
-        NumberedCAHashMap,
-        MaxSizeHashMap,
-        MaxSizeCAHashMap,
-        ByteArrayHashMap,
-        PrioritizedByteArrayHashMap,
-        MaxSizeMetadataLinkedByteArrayHashMap,
-        MaxSizeLinkedByteArrayHashMap
-    }
 }

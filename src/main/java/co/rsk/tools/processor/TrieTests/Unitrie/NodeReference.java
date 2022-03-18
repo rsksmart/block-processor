@@ -90,7 +90,7 @@ public class NodeReference {
         if (encodedRef ==null) return null;
         ObjectReference r  = GlobalEncodedObjectStore.get().retrieve(encodedRef);
         try {
-            Trie node = Trie.fromMessage(r.message, encodedRef, r.leftRef, r.rightRef, store);
+            Trie node = TrieBuilder.fromMessage(store.getTrieFactory(),r.message, encodedRef, r.leftRef, r.rightRef, store);
             if (r.saved)
                 node.markAsSaved();
             return node;

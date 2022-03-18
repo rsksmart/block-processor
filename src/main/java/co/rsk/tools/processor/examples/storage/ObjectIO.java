@@ -85,11 +85,17 @@ public class ObjectIO {
             b[off    ] = (byte) (val >>> 8);
         }
 
-    public static void putInt(byte[] b, int off, int val) {
+        public static void putInt(byte[] b, int off, int val) {
             b[off + 3] = (byte) (val       );
             b[off + 2] = (byte) (val >>>  8);
             b[off + 1] = (byte) (val >>> 16);
             b[off    ] = (byte) (val >>> 24);
+        }
+        public static void putIntLittleEndian(byte[] b, int off, int val) {
+            b[off + 0] = (byte) (val);
+            b[off + 1] = (byte) (val >>> 8);
+            b[off + 2] = (byte) (val >>> 16);
+            b[off + 3] = (byte) (val >>> 24);
         }
 
     public static void putFloat(byte[] b, int off, float val) {

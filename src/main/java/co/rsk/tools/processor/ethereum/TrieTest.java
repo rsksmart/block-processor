@@ -6,6 +6,7 @@ import co.rsk.tools.processor.TrieTests.Unitrie.*;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
 import co.rsk.tools.processor.TrieUtils.ExpandedTrieKeySlice;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
+import org.ethereum.datasource.HashMapDB;
 import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.datasource.LevelDbDataSource;
 import org.ethereum.util.ByteUtil;
@@ -208,6 +209,7 @@ public class TrieTest extends Benchmark {
     // Requires that the database is already loaded with all the data
     public void readTest() {
         testMode = StateTrieSimulator.SimMode.simEOAs;
+        blockchain = StateTrieSimulator.Blockchain.Ethereum;
 
         maxKeysTopDown = 1L * (1 << 20); // total: 1M
         long totalKeys = maxKeysTopDown;
@@ -265,7 +267,7 @@ public class TrieTest extends Benchmark {
             // This test is about raw in-memory trie lookup. It's not realistic, because
             // most of the nodes are not in the memory trie, nor in the in-memory cache,
             // but on SSD DB.
-            log("Test: SSD DB retrieval to build full trie, without filesystem cache");
+            logTest("Test: SSD DB retrieval to build full trie, without filesystem cache");
             existentReadNodes(rootNode,maxExistentReads,1,false,false);
 
             log("Clearing all application caches");
@@ -275,19 +277,19 @@ public class TrieTest extends Benchmark {
 
             // Now we test again, but we assume filesystem caches will be filled.
             // So we clean all application caches.
-            log("Test: SSD DB retrieval to build full trie, with filesystem caches");
+            logTest("Test: SSD DB retrieval to build full trie, with filesystem caches");
             existentReadNodes(rootNode,  maxExistentReads, 1, false,false);
         } else {
             // This test is about raw in-memory trie lookup. It's not realistic, because
             // most of the nodes are not in the memory trie, nor in the in-memory cache,
             // but on SSD DB.
-            log("Test: SSD DB retrieval to build full trie");
+            logTest("Test: SSD DB retrieval to build full trie");
             existentReadNodes(rootNode, maxExistentReads, 1, false, false);
         }
         // This test is about raw in-memory trie lookup. It's not realistic, because
         // most of the nodes are not in the memory trie, nor in the in-memory cache,
         // but on SSD DB.
-        log("Test: in-memory built trie");
+        logTest("Test: in-memory built trie");
         existentReadNodes(rootNode,maxExistentReads,passes,false,false);
 
         // This test is about in-memory node cache lookup. It's too not realistic, because
@@ -295,18 +297,24 @@ public class TrieTest extends Benchmark {
         // but on SSD DB.
         // The pre-condition of this test is that all nodes are in the cache.
         // This is satisfied by the first existentReadNodes() call, which loads them all.
-        log("Test: in-memory cache");
+        logTest("Test: in-memory cache");
         destroyTree();
         existentReadNodes(rootNode,maxExistentReads,passes,false,true);
 
         // This test is more realistic. It mantains some portion of the tree built in-memory
         // and goes to fetch nodes from the cache.
-        log("Test: Keeping trie built during block execution");
+        logTest("Test: Keeping trie built during block execution");
         existentReadNodes(rootNode,maxExistentReads,passes,true,false);
 
         randomReadNodes(rootNode, 0);
         //logTraceInfo();
     }
+
+    public void logTest(String s) {
+        log("------------------------------------------------------");
+        log(s);
+    }
+
     public void randomReadNodes(TrieImpl t,long maxReads) {
 
         started = System.currentTimeMillis();
@@ -488,7 +496,7 @@ public class TrieTest extends Benchmark {
 
     StateTrieSimulator stateTrieSim = new StateTrieSimulator();
     StateTrieSimulator.SimMode testMode = StateTrieSimulator.SimMode.simEOAs;
-    StateTrieSimulator.Blockchain blockchain = StateTrieSimulator.Blockchain.Ethereum;
+    StateTrieSimulator.Blockchain blockchain = StateTrieSimulator.Blockchain.RSK;// StateTrieSimulator.Blockchain.Ethereum;
 
     public void computeAverageAccountSize() {
         stateTrieSim.computeAverageAccountSize();
@@ -795,8 +803,61 @@ public class TrieTest extends Benchmark {
         return getExistentKey(x);
     }
 
+    public void simpleEthereumTrieWriteTest1() {
+        KeyValueDataSource ds = new HashMapDB();
+        ds = new DataSourceWithCacheAndStats(ds, 100, null);
+        dsWithCache = (DataSourceWithCacheAndStats) ds;
+
+        rootNode = new TrieImpl(getSourceBridge());
+        byte[] key1 = new byte[32];
+        byte[] value1 = new byte[78]; // an account
+        key1[0] = 1;
+        value1[0] = 1;
+
+        rootNode.put(key1, value1);
+        byte[] key2 = new byte[32];
+        byte[] value2 = new byte[78]; // an account
+        key2[0] = 2;
+        value2[0] = 2;
+
+        rootNode.put(key2, value2);
+
+        System.out.println(rootNode.dumpTrie());
+    }
+
+    public void smallEthereumTrieWriteTest() {
+        // This is the maximum key size that can be embedded in parent nodes
+        // Since 20 bytes is enough to store a ERC20 key, this means that
+        // ERC20 optimization can also be applied to Ethereum, but amount
+        // must be 64 bits max.
+        //
+        ethereumTrieWriteTest(20,8);
+    }
+
+    public void simpleEthereumTrieWriteTest() {
+        ethereumTrieWriteTest(32,78);
+    }
+    public void ethereumTrieWriteTest(int keySize,int dataSize) {
+        KeyValueDataSource ds = new HashMapDB();
+        ds = new DataSourceWithCacheAndStats(ds, 100, null);
+        dsWithCache = (DataSourceWithCacheAndStats) ds;
+
+        rootNode = new TrieImpl(getSourceBridge());
+        for(int i = 0;i<16;i++) {
+            byte[] key1 = new byte[keySize];
+            byte[] value1 = new byte[dataSize]; // an account
+            key1[0] = (byte) i;
+            value1[0] = (byte) i;
+
+            rootNode.put(key1, value1);
+        }
+
+        System.out.println(rootNode.dumpTrie());
+    }
+
     public void writeTest() {
-        testMode = StateTrieSimulator.SimMode.simEOAs;
+        testMode = StateTrieSimulator.SimMode.simERC20Balances;
+        blockchain = StateTrieSimulator.Blockchain.RSK;//StateTrieSimulator.Blockchain.Ethereum;
 
         long addMaxKeysTopDown = 1L * (1 << 20); // total: 1M
 
@@ -863,9 +924,10 @@ public class TrieTest extends Benchmark {
 
     public static void main (String args[]) {
         TrieTest c = new TrieTest();
-        //
-        c.writeTest();
-        //c.readTest();
+        //c.smallEthereumTrieWriteTest();
+        //c.simpleEthereumTrieWriteTest();
+        //c.writeTest();
+        c.readTest();
         //c.test1();
         //c.test2();
     }

@@ -12,11 +12,20 @@ public class Benchmark {
     public long started;
     public long elapsedTime;
 
+    public long lastDumpTime;
+    public long  lastDumpIndex;
+
+
     public long ended;
     public long endMbs;
     String logName;
     FileWriter myWriter;
+    boolean showPartialMemConsumed = true;
 
+    public String getMillions(long i) {
+        String maxStr = ""+ (i/1000/1000)+"M";
+        return maxStr;
+    }
 
     public void showUsedMemory() {
         garbageCollector();
@@ -24,7 +33,7 @@ public class Benchmark {
         log("Memory used now [MB]: " + usedMemoryMbs);
     }
 
-    public void start(boolean showMem) {
+    public void startMem(boolean showMem) {
         long usedMemoryMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
         startMbs = usedMemoryMbs;
         if (showMem) {
@@ -34,15 +43,24 @@ public class Benchmark {
             log("Used before start [MB]: " + startMbs);
         }
 
+    }
+
+    public void start(boolean showMem) {
+        if (showMem)
+            startMem(true);
+
         started = System.currentTimeMillis();
+        lastDumpTime = started;
+        lastDumpIndex = 0;
         log("Starting...");
     }
+
 
     public void garbageCollector() {
         log("Forced system garbage collection");
         System.gc();
-        log("Forced store garbage collection");
     }
+
     public void stop(boolean showmem) {
         ended = System.currentTimeMillis();
         log("Stopped.");
@@ -63,25 +81,41 @@ public class Benchmark {
         log("item " + i + " (" + (i * 100 / amax) + "%)");
         printMemStats("--");
         long ended = System.currentTimeMillis();
-        elapsedTime = (ended - started) / 1000;
+        long elapsedMillis = (ended - started);
+        elapsedTime = elapsedMillis/ 1000;
         log("-- Partial Elapsed time [s]: " + elapsedTime);
-        if (elapsedTime>0)
-            log("-- Added nodes/sec: "+(i/elapsedTime)); // 18K
-        endMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
-        //System.gc();
-        log("-- Jave Mem Used[MB]: " + endMbs);
-        log("-- Jave Mem Comsumed [MB]: " + (endMbs - startMbs));
+        if (elapsedMillis>0) {
+            log("-- Average nodes/sec: " + (i *1000/ elapsedMillis));
+        }
+        long elapseMillisSinceLastDump = ended-lastDumpTime;
+        if (elapseMillisSinceLastDump>0) {
+            long nodesProcessed = (i-lastDumpIndex);
+            log("-- Nodes processed delta: "+nodesProcessed);
+            log("-- Current nodes/sec: " + ( nodesProcessed*1000/ elapseMillisSinceLastDump));
+            lastDumpIndex = i;
+            lastDumpTime = ended;
+        }
+        lastDumpTime = ended;
 
+        endMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
+        if (showPartialMemConsumed) {
+            log("-- Jave Mem Used[MB]: " + endMbs);
+            log("-- Jave Mem Comsumed [MB]: " + (endMbs - startMbs));
+        }
     }
 
-    public void dumpMemProgress(long i,long amax) {
+    public void dumpShortProgress(long i,long amax) {
         log("item " + i + " (" + (i * 100 / amax) + "%)");
 
         long ended = System.currentTimeMillis();
         elapsedTime = (ended - started) / 1000;
         log("-- Partial Elapsed time [s]: " + elapsedTime);
         if (elapsedTime>0)
-            log("-- Added nodes/sec: "+(i/elapsedTime)); // 18K
+            log("-- Nodes/sec: "+(i/elapsedTime)); // 18K
+    }
+
+    public void dumpMemProgress(long i,long amax) {
+        dumpShortProgress(i,amax);
         endMbs = (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024;
         log("-- Jave Mem Used[MB]: " + endMbs);
         log("-- Jave Mem Comsumed [MB]: " + (endMbs - startMbs));
@@ -89,9 +123,11 @@ public class Benchmark {
     }
     public void plainCreateLogFilename(String name) {
         logName = name;
+        String logNameExt = name + ".txt";
+        System.out.println("Creating: " + logNameExt);
 
         try {
-            File myObj = new File(name + ".txt");
+            File myObj = new File(logNameExt);
             if (myObj.createNewFile()) {
                 System.out.println("File created: " + myObj.getName());
             } else {

@@ -20,9 +20,7 @@ package co.rsk.tools.processor.TrieTests.Unitrie.store;
 
 import co.rsk.tools.processor.TrieTests.Logger;
 import co.rsk.tools.processor.TrieTests.LoggerFactory;
-import co.rsk.tools.processor.TrieTests.Unitrie.NodeReference;
-import co.rsk.tools.processor.TrieTests.Unitrie.Trie;
-import co.rsk.tools.processor.TrieTests.Unitrie.TrieStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.*;
 import org.ethereum.datasource.KeyValueDataSource;
 
 
@@ -52,6 +50,14 @@ public class TrieStoreImpl implements TrieStore {
     public TrieStoreImpl(KeyValueDataSource store) {
         this.store = store;
     }
+
+    public void accessNode(Trie trie) {
+     // now we move to head to the double-linked list.
+    }
+    public  TrieFactory getTrieFactory() {
+        return DoubleLinkedTrieFactoryImpl.get();
+    }
+
     public boolean isTraceEnabled() {
         return false;
     }
@@ -168,7 +174,7 @@ public class TrieStoreImpl implements TrieStore {
 
         }
 
-        Trie trie = Trie.fromMessage(message, this).markAsSaved();
+        Trie trie = TrieBuilder.fromMessage(getTrieFactory(),message, this).markAsSaved();
         return Optional.of(trie);
     }
 
