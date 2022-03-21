@@ -95,19 +95,19 @@ public class TrieBuilder {
         }
 
         int keccakSize = Keccak256Helper.DEFAULT_SIZE_BYTES;
-        NodeReference left = NodeReference.empty();
-        NodeReference right = NodeReference.empty();
+        NodeReference left = NodeReferenceImpl.empty();
+        NodeReference right = NodeReferenceImpl.empty();
 
         int nhashes = 0;
         if ((bhashes & 0b01) != 0) {
             Keccak256 nodeHash = readHash(message, current);
-            left = new NodeReference(store, null, nodeHash,null);
+            left = store.getNodeReferenceFactory().newReference(store, null, nodeHash);
             current += keccakSize;
             nhashes++;
         }
         if ((bhashes & 0b10) != 0) {
             Keccak256 nodeHash = readHash(message, current);
-            right = new NodeReference(store, null, nodeHash,null);
+            right = store.getNodeReferenceFactory().newReference(store, null, nodeHash);
             current += keccakSize;
             nhashes++;
         }
@@ -164,8 +164,8 @@ public class TrieBuilder {
 
         TrieKeySlice sharedPath = SharedPathSerializer.deserialize(message, sharedPrefixPresent);
 
-        NodeReference left = NodeReference.empty();
-        NodeReference right = NodeReference.empty();
+        NodeReference left = NodeReferenceImpl.empty();
+        NodeReference right = NodeReferenceImpl.empty();
         if (leftNodePresent) {
             if (leftNodeEmbedded) {
                 byte[] lengthBytes = new byte[Uint8.BYTES];
@@ -175,12 +175,12 @@ public class TrieBuilder {
                 byte[] serializedNode = new byte[length.intValue()];
                 message.get(serializedNode);
                 Trie node = fromMessageRskip107(trieFactory,ByteBuffer.wrap(serializedNode), null,null,null,store);
-                left = new NodeReference(store, node, null,leftOfs);
+                left = store.getNodeReferenceFactory().newReference(store, node, null,leftOfs);
             } else {
                 byte[] valueHash = new byte[Keccak256Helper.DEFAULT_SIZE_BYTES];
                 message.get(valueHash);
                 Keccak256 nodeHash = new Keccak256(valueHash);
-                left = new NodeReference(store, null, nodeHash, leftOfs);
+                left = store.getNodeReferenceFactory().newReference(store, null, nodeHash, leftOfs);
             }
         }
 
@@ -193,12 +193,12 @@ public class TrieBuilder {
                 byte[] serializedNode = new byte[length.intValue()];
                 message.get(serializedNode);
                 Trie node = fromMessageRskip107(trieFactory,ByteBuffer.wrap(serializedNode),null,null,null, store);
-                right = new NodeReference(store, node, null,rightOfs);
+                right = store.getNodeReferenceFactory().newReference(store, node, null,rightOfs);
             } else {
                 byte[] valueHash = new byte[Keccak256Helper.DEFAULT_SIZE_BYTES];
                 message.get(valueHash);
                 Keccak256 nodeHash = new Keccak256(valueHash);
-                right = new NodeReference(store, null, nodeHash,rightOfs);
+                right = store.getNodeReferenceFactory().newReference(store, null, nodeHash,rightOfs);
             }
         }
 

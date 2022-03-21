@@ -314,7 +314,7 @@ public class CompareTries extends Benchmark {
         log(":: Remap Used Before MB: " + rstartMbs);
         ms.beginRemap();
         log(":: Remap removing spaces: "+ ms.getGarbageCollectionDescription());
-        t.compressEncodingsRecursivelly();
+        ((TrieWithENC) t).compressEncodingsRecursivelly();
         //t.checkTree();
         long rended = System.currentTimeMillis();
 
@@ -396,7 +396,8 @@ public class CompareTries extends Benchmark {
     TrieStore trieStore;
 
     public void createInMemoryTrieStore() {
-        trieStore = new DummyCacheTrieStore();
+        //trieStore = new DummyCacheTrieStore();
+        trieStore = new TrieStoreImpl(null);
     }
 
     public void openTrieStore(boolean deleteIfExists,boolean abortIfExists,String dbName) {
@@ -952,8 +953,9 @@ public class CompareTries extends Benchmark {
 
             rootNode = trieStore.getTrieFactory().newTrie(getTrieStore(), fixSharedPath,
                     null,
-                    new NodeReference(null, rootNode, null, null),
-                    NodeReference.empty(),
+                    trieStore.getNodeReferenceFactory().newReference(null, rootNode),
+                    //new NodeReference(null, rootNode, null, null),
+                    NodeReferenceImpl.empty(),
                     Uint24.ZERO,
                     null);
             System.out.println("Post fix part: ");
@@ -1031,8 +1033,8 @@ public class CompareTries extends Benchmark {
             nodes[i] = trieStore.getTrieFactory().newTrie(null,
                     keySlice,
                     value,
-                    NodeReference.empty(),
-                    NodeReference.empty(),
+                    NodeReferenceImpl.empty(),
+                    NodeReferenceImpl.empty(),
                     new Uint24(value.length),
                     null);
 
@@ -1063,10 +1065,11 @@ public class CompareTries extends Benchmark {
                     dumpProgress(i,width);
                 }
 
+                NodeReferenceFactory nrf = trieStore.getNodeReferenceFactory();
                 newNodes[i] = trieStore.getTrieFactory().newTrie(null,emptySharedPath,
                         null,
-                        new NodeReference(null,nodes[i*2],null,null),
-                        new NodeReference(null,nodes[i*2+1],null,null),
+                        nrf.newReference(null,nodes[i*2]),
+                        nrf.newReference(null,nodes[i*2+1]),
                         Uint24.ZERO,
                         null);
                 nodes[i*2] = null; // try to free mem
@@ -1819,7 +1822,7 @@ public class CompareTries extends Benchmark {
             max = 16L * (1 << 20);
             buildbottomUp();
             EncodedObjectHeap.get().save("16M",
-                    ((LongEOR) rootNode.getEncodedRef()).ofs);
+                    ((LongEOR) ((TrieWithENC) rootNode).getEncodedRef()).ofs);
             System.exit(0);
             EncodedObjectHeap.get().reset();
 

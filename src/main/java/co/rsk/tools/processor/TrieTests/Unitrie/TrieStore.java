@@ -10,10 +10,14 @@ public interface TrieStore {
     // This let the trie store decide if the node deserves being cached.
     // Some decisions are made not only based on frequency of access, but also on
     // key depth. Therefore we pass the full key length as argument.
-    void accessNode(Trie trie);
+    // void accessNode(Trie trie);
 
     // Returns a trie factory that is compatible with this store.
     TrieFactory getTrieFactory();
+
+    NodeReferenceFactory getNodeReferenceFactory();
+
+    DecodedNodeCache getDecodedNodeCache();
 
     void save(Trie trie);
 
@@ -24,6 +28,7 @@ public interface TrieStore {
      * @return an optional containing the {@link Trie} with <code>rootHash</code> if found
      */
     Optional<Trie> retrieve(byte[] hash);
+
 
     //Optional<ByteBuffer> retrieve(byte[] hash);
 

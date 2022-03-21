@@ -1,8 +1,6 @@
 package co.rsk.tools.processor.TrieTests.Unitrie;
 
-import co.rsk.core.types.ints.Uint16;
 import co.rsk.core.types.ints.Uint24;
-import co.rsk.core.types.ints.Uint8;
 import co.rsk.crypto.Keccak256;
 import co.rsk.metrics.profilers.Metric;
 import co.rsk.metrics.profilers.Profiler;
@@ -22,8 +20,8 @@ import static org.ethereum.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 public class TrieImpl implements Trie {
 
-    private static final Profiler profiler = ProfilerFactory.getInstance();
-    private static final int ARITY = 2;
+    protected static final Profiler profiler = ProfilerFactory.getInstance();
+    protected static final int ARITY = 2;
     protected static final String INVALID_VALUE_LENGTH = "Invalid value length";
     // all zeroed, default hash for empty nodes
     private static final Keccak256 EMPTY_HASH = makeEmptyHash();
@@ -37,14 +35,14 @@ public class TrieImpl implements Trie {
 
 
     // this node hash value
-    private Keccak256 hash;
+    protected Keccak256 hash;
 
     // this node hash value as calculated before RSKIP 107
     // we need to cache it, otherwise TrieConverter is prohibitively slow.
-    private Keccak256 hashOrchid;
+    protected Keccak256 hashOrchid;
 
     // temporary storage of encoding. Removed after save()
-    private byte[] encoded;
+    protected byte[] encoded;
 
     // valueLength enables lazy long value retrieval.
     // The length of the data is now stored. This allows EXTCODESIZE to
@@ -67,7 +65,7 @@ public class TrieImpl implements Trie {
     protected final TrieStore store;
 
     // already saved in store flag
-    private volatile boolean saved;
+    protected volatile boolean saved;
 
     // already saved in Memory store flag
     //private volatile boolean memSaved;
@@ -77,10 +75,7 @@ public class TrieImpl implements Trie {
 
     static boolean tryToCompress = true;
 
-    EncodedObjectRef encodedRef;
     boolean isEmbedded;
-
-    //boolean reMapped = false;
 
     // default constructor, no secure
     public TrieImpl() {
@@ -94,9 +89,9 @@ public class TrieImpl implements Trie {
     // constructor
     protected TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value) {
         this(store, sharedPath, value,
-                NodeReference.empty(),
-                NodeReference.empty(), getDataLength(value), null,
-                new VarInt(0),null,
+                NodeReferenceImpl.empty(),
+                NodeReferenceImpl.empty(), getDataLength(value), null,
+                new VarInt(0),
                 terminalNodeEmbeddable(
                         new SharedPathSerializer(sharedPath).serializedLength(),
                         value));
@@ -114,61 +109,34 @@ public class TrieImpl implements Trie {
 
     public TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value, NodeReference left, NodeReference right, Uint24 valueLength, Keccak256 valueHash) {
 
-        this(store, sharedPath, value, left, right, valueLength, valueHash, null,null,
+        this(store, sharedPath, value, left, right, valueLength, valueHash, null,
                 isEmbeddable(sharedPath, left,  right, valueLength));
     }
 
 
 
-    private void changeSaved() {
-        EncodedObjectStore om = GlobalEncodedObjectStore.get();
-        if (this.encoded==null) return;
-        if (om==null) return;
-        om.setSaved(this.encodedRef,this.saved);
-
+    protected void changeSaved() {
     }
 
-    private void storeNodeInMem() {
-        if (GlobalEncodedObjectStore.get().isRemapping())
-            throw new RuntimeException("Should never encode nodes during remapping");
-        //ByteBuffer buffer = ByteBuffer.wrap(mem,memTop,mem.length-memTop);
-        //serializeToByteBuffer(buffer);
-        internalToMessage();
-        EncodedObjectStore om = GlobalEncodedObjectStore.get();
-        if (om.accessByHash()) {
-            this.encodedRef = om.add(encoded,getHash(),this.saved);
-        } else
-            this.encodedRef = om.add(encoded,
-                    left.getEncodedRef(),
-                    right.getEncodedRef(),this.saved);
-        /*
-        if (encodedOfs==47958557) {
-            System.out.println("First position 1");
-            ObjectHeap.get().bug = false;
-            ObjectHeap.get().checkbug();
-
-            retrieveNode(encodedOfs);
-        }*/
+    protected void storeNodeInMem() {
     }
 
     protected TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value,
                  NodeReference left, NodeReference right,
                  Uint24 valueLength, Keccak256 valueHash,
-                 VarInt childrenSize,
-                 EncodedObjectRef aEncodedOfs) {
+                 VarInt childrenSize) {
         this(store,  sharedPath, value,
                 left,  right,
                 valueLength, valueHash,
-                childrenSize, aEncodedOfs,
+                childrenSize,
                 isEmbeddable(sharedPath, left,  right, valueLength));
     }
 
     // full constructor
-    private TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value,
+    protected TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value,
                  NodeReference left, NodeReference right,
                  Uint24 valueLength, Keccak256 valueHash,
-                 VarInt childrenSize,
-                 EncodedObjectRef aEncodedOfs,boolean isEmbedded) {
+                 VarInt childrenSize,boolean isEmbedded) {
         this.isEmbedded = isEmbedded;
         this.value = value;
         this.left = left;
@@ -179,97 +147,19 @@ public class TrieImpl implements Trie {
         this.valueHash = valueHash;
         this.childrenSize = childrenSize;
         checkValueLength();
-        this.encodedRef = aEncodedOfs;
-        // New
-        compressIfNecessary();
+
     }
 
-    public void compressEncodingsRecursivelly() {
-        for (byte k = 0; k < ARITY; k++) {
-            Trie node = this.retrieveNode(k);
+   /* public void accessThisNode() {
+        if (store!=null)
+            store.accessNode(this);
+    }*/
 
-            if (node == null) {
-                continue;
-            }
-            node.compressEncodingsRecursivelly();
 
-            getNodeReference(k).setEncodedRef(node.getEncodedRef());
-        }
-        remapEncoding();
-    }
-
-    public void checkTree() {
-        // I think I could skip moving children if the current offset corresponds to the current space
-        // if I reserve space for the parent before creating children, then the parent would always be
-        // older than the children. But that requires knowing the size of the parent before serializing the
-        // children.
-        for (byte k = 0; k < ARITY; k++) {
-            Trie node = this.retrieveNode(k);
-
-            if (node == null) {
-                continue;
-            }
-            node.checkTree();
-
-            getNodeReference(k).checkRerefence();
-        }
-        checkReference();
-    }
 
     public void checkReference() {
-        if (!isEmbedded) {
-            GlobalEncodedObjectStore.get().checkDuringRemap(encodedRef);// left.getEncodedOfs(), right.getEncodedOfs());
-        }
-
     }
 
-    public void remapEncoding() {
-        /*
-        long pencodedOfs = encodedOfs;
-        if (encodedOfs==161722718)
-            encodedOfs=encodedOfs;
-
-         */
-        if (!isEmbedded) {
-            encodedRef = GlobalEncodedObjectStore.get().remap(encodedRef, left.getEncodedRef(), right.getEncodedRef());
-        }
-        /*
-        if (encodedOfs==47958557) {
-            System.out.println("First position");
-        }
-        if (encodedOfs==161722718) {
-            encodedOfs = encodedOfs;
-            System.out.println("previous ofs: "+pencodedOfs);
-            System.out.println("previous space: "+ObjectHeap.get().getSpaceNumOfPointer(pencodedOfs));
-            Trie xx = retrieveNode(encodedOfs);
-        }
-
-         */
-        //reMapped = true;
-    }
-
-    public static Trie retrieveNode(TrieFactory trieFactory,EncodedObjectRef encodedOfs) {
-        //byte[] data = ObjectHeap.get().retrieveData(encodedOfs);
-        ObjectReference r = GlobalEncodedObjectStore.get().retrieve(encodedOfs);
-        Trie node = TrieBuilder.fromMessage(trieFactory,r.message, encodedOfs, r.leftRef, r.rightRef, null);
-        return node;
-    }
-    public void compressIfNecessary() {
-        if (!tryToCompress) return;
-        if (isEmbedded) return;
-        if (GlobalEncodedObjectStore.get()==null)
-            return;
-        if (encodedRef ==null)
-            storeNodeInMem();
-        if (!this.left.isEmbeddable())
-            this.left.removeLazyNode();
-
-        if (!this.right.isEmbeddable())
-            this.right.removeLazyNode();
-
-        encoded = null; // remove encoded, it's already in InMemStore
-        //value = null; // remove value: it's already in MemStore
-    }
 
     /**
      * getHash calculates and/or returns the hash associated with this node content
@@ -701,9 +591,9 @@ public class TrieImpl implements Trie {
         } else if (lvalue.compareTo(Uint24.ZERO) > 0) {
             buffer.put(this.getValue());
         }
-
     }
-    private void internalToMessage() {
+
+    protected void internalToMessage() {
         Uint24 lvalue = this.valueLength;
         boolean hasLongVal = this.hasLongValue();
 
@@ -729,7 +619,11 @@ public class TrieImpl implements Trie {
     }
 
     public  Trie retrieveNode(byte implicitByte,boolean persistent) {
-        return getNodeReference(implicitByte).getNode(persistent).orElse(null);
+        Trie node = getNodeReference(implicitByte).getNode(persistent).orElse(null);
+        //if (node!=null)
+        //    node.accessThisNode();
+
+        return node;
     }
     public NodeReference getNodeReference(byte implicitByte) {
         return implicitByte == 0 ? this.left : this.right;
@@ -845,8 +739,9 @@ public class TrieImpl implements Trie {
                 return null;
             }
 
-            // Seems that here we're retutning the same node as this.
+            // Seems that here we're returning the same node as this.
             // What is changing?
+            // We have the same path, but different values
             return store.getTrieFactory().newTrie(
                     this.store,
                     this.sharedPath,
@@ -855,8 +750,7 @@ public class TrieImpl implements Trie {
                     this.right,
                     getDataLength(value),
                     null,
-                    this.childrenSize,
-                    this.encodedRef // TO DO: REALLY ??? check this
+                    this.childrenSize
             );
         }
 
@@ -882,7 +776,8 @@ public class TrieImpl implements Trie {
 
         VarInt newChildrenSize = this.childrenSize;
 
-        NodeReference newNodeReference = new NodeReference(this.store, newNode, null,newNode.getEncodedRef());
+        NodeReference newNodeReference = store.getNodeReferenceFactory().newReference(
+                this.store, newNode);
         NodeReference newLeft;
         NodeReference newRight;
         if (pos == 0) {
@@ -913,8 +808,8 @@ public class TrieImpl implements Trie {
     private Trie split(TrieKeySlice commonPath) {
         int commonPathLength = commonPath.length();
         TrieKeySlice newChildSharedPath = sharedPath.slice(commonPathLength + 1, sharedPath.length());
-        Trie newChildTrie = store.getTrieFactory().newTrie(this.store, newChildSharedPath, this.value, this.left, this.right, this.valueLength, this.valueHash, this.childrenSize,null);
-        NodeReference newChildReference = new NodeReference(this.store, newChildTrie, null,newChildTrie.getEncodedRef());
+        Trie newChildTrie = store.getTrieFactory().newTrie(this.store, newChildSharedPath, this.value, this.left, this.right, this.valueLength, this.valueHash, this.childrenSize);
+        NodeReference newChildReference = store.getNodeReferenceFactory().newReference(this.store, newChildTrie);
 
         // this bit will be implicit and not present in a shared path
         byte pos = sharedPath.get(commonPathLength);
@@ -924,13 +819,13 @@ public class TrieImpl implements Trie {
         NodeReference newRight;
         if (pos == 0) {
             newLeft = newChildReference;
-            newRight = NodeReference.empty();
+            newRight = NodeReferenceImpl.empty();
         } else {
-            newLeft = NodeReference.empty();
+            newLeft = NodeReferenceImpl.empty();
             newRight = newChildReference;
         }
 
-        return store.getTrieFactory().newTrie(this.store, commonPath, null, newLeft, newRight, Uint24.ZERO, null, childrenSize,null);
+        return store.getTrieFactory().newTrie(this.store, commonPath, null, newLeft, newRight, Uint24.ZERO, null, childrenSize);
     }
 
     public boolean isTerminal() {
@@ -1121,10 +1016,6 @@ public class TrieImpl implements Trie {
         return s;
     }
 
-
-    public EncodedObjectRef getEncodedRef() {
-        return encodedRef;
-    }
 
     // Additional auxiliary methods for Merkle Proof
 

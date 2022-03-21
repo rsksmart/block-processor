@@ -40,7 +40,7 @@ import static org.ethereum.util.ByteUtil.EMPTY_BYTE_ARRAY;
 public interface Trie {
 
     static final int MAX_EMBEDDED_NODE_SIZE_IN_BYTES = 44;
-    static boolean tryToCompress = true;
+
 
     public static boolean isEmbeddable(TrieKeySlice sharedPath,NodeReference left, NodeReference right,Uint24 valueLength) {
         boolean isEmb = false;
@@ -52,15 +52,14 @@ public interface Trie {
         return isEmb;
     }
 
-    abstract public void compressEncodingsRecursivelly() ;
-
-    abstract public void checkTree() ;
+    //public void accessThisNode();
+    //abstract public void compressEncodingsRecursivelly() ;
+    //abstract public void checkTree() ;
 
     abstract public void checkReference() ;
 
-    abstract void remapEncoding();
-
-    abstract public void compressIfNecessary();
+    //abstract void remapEncoding();
+    //abstract public void compressIfNecessary();
 
 
 
@@ -294,10 +293,7 @@ public interface Trie {
         return new Keccak256(Keccak256Helper.keccak256(RLP.encodeElement(EMPTY_BYTE_ARRAY)));
     }
 
-    abstract public EncodedObjectRef getEncodedRef();
-
     // Additional auxiliary methods for Merkle Proof
-
 
     public List<Trie> getNodes(byte[] key);
 

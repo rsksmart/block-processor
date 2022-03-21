@@ -51,11 +51,19 @@ public class TrieStoreImpl implements TrieStore {
         this.store = store;
     }
 
-    public void accessNode(Trie trie) {
-     // now we move to head to the double-linked list.
-    }
+
+
     public  TrieFactory getTrieFactory() {
-        return DoubleLinkedTrieFactoryImpl.get();
+        return TrieFactoryImpl.get();
+    }
+
+    public NodeReferenceFactory getNodeReferenceFactory() {
+        return NodeReferenceWithLazyNodeFactory.get();
+    }
+
+    @Override
+    public DecodedNodeCache getDecodedNodeCache() {
+        return DecodedNodeCache.get();
     }
 
     public boolean isTraceEnabled() {

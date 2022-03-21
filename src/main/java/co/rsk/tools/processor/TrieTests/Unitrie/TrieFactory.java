@@ -12,13 +12,18 @@ public interface TrieFactory {
     public Trie newTrie(TrieStore store) ;
 
     public Trie newTrie(TrieStore store, TrieKeySlice sharedPath, byte[] value) ;
-    public Trie newTrie(TrieStore store, TrieKeySlice sharedPath, byte[] value, NodeReference left, NodeReference right, Uint24 valueLength, Keccak256 valueHash) ;
+    public Trie newTrie(TrieStore store, TrieKeySlice sharedPath, byte[] value, NodeReference left, NodeReference right,
+                        Uint24 valueLength, Keccak256 valueHash) ;
 
     public Trie newTrie(TrieStore store, TrieKeySlice sharedPath, byte[] value,
                      NodeReference left, NodeReference right,
                      Uint24 valueLength, Keccak256 valueHash,
-                     VarInt childrenSize,
-                     EncodedObjectRef aEncodedOfs) ;
+                     VarInt childrenSize) ;
+
+    public Trie newTrie(TrieStore store, TrieKeySlice sharedPath, byte[] value,
+                        NodeReference left, NodeReference right,
+                        Uint24 valueLength, Keccak256 valueHash,
+                        VarInt childrenSize,EncodedObjectRef ref) ;
 
     public Trie cloneTrie(Trie achild,TrieKeySlice newSharedPath);
 
