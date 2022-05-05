@@ -141,7 +141,7 @@ public class TrieBuilder {
         }
 
         // it doesn't need to clone value since it's retrieved from store or created from message
-        Trie trie = store.getTrieFactory().newTrie(store, sharedPath, value, left, right, lvalue, valueHash);
+        Trie trie = store.getTrieFactory().newTrie(store, sharedPath, value, left, right, lvalue, valueHash,null,null);
 
         return trie;
     }

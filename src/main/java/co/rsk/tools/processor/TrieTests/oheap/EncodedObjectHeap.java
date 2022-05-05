@@ -1,7 +1,7 @@
 package co.rsk.tools.processor.TrieTests.oheap;
 
 import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.ENC.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ObjectReference;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
 
@@ -69,10 +69,10 @@ public class EncodedObjectHeap extends EncodedObjectStore {
         setHead(headOfEmptySpaces, desc.emptySpaces,false);
         for(int i=0;i<desc.filledSpaces.length;i++ ) {
             int num = desc.filledSpaces[i];
-            spaces[num].readFromFile(fileName+"."+num+".space");
+            spaces[num].readFromFile(fileName+"."+num+".space",false);
         }
         curSpaceNum = desc.currentSpace;
-        spaces[curSpaceNum].readFromFile(fileName+"."+curSpaceNum+".space");
+        spaces[curSpaceNum].readFromFile(fileName+"."+curSpaceNum+".space",false);
         return desc.rootOfs;
     }
 
@@ -204,12 +204,16 @@ public class EncodedObjectHeap extends EncodedObjectStore {
         return s;
     }
 
+    public Space newSpace() {
+        return new DirectAccessSpace();
+    }
+
     public void reset() {
         headOfEmptySpaces.clear();
         spaces = new Space[maxSpaces];
 
         for(int i=0;i<maxSpaces;i++) {
-            spaces[i] = new Space();
+            spaces[i] = newSpace();
             headOfEmptySpaces.addSpace(i);
         }
         curSpaceNum = getNewSpaceNum();
@@ -309,20 +313,20 @@ public class EncodedObjectHeap extends EncodedObjectStore {
     final int M2 = 74;
 
     public void writeDebugFooter(Space space,int ofs) {
-        if(ofs>space.mem.length-debugHeaderSize) return;
-        space.mem[ofs]=M1;
-        space.mem[ofs+1]=M2;
+        if(ofs>space.spaceSize()-debugHeaderSize) return;
+        space.putByte(ofs,(byte)M1);
+        space.putByte(ofs+1,(byte) M2);
     }
 
     public void writeDebugHeader(Space space,int ofs) {
         if(ofs<debugHeaderSize) return;
-        space.mem[ofs-2]=M1;
-        space.mem[ofs-1]=M2;
+        space.putByte(ofs-2, (byte)M1);
+        space.putByte(ofs-1, (byte)M2);
     }
 
     public void checkDeugMagicWord(Space space,int ofs) {
-        if ((space.mem[ofs]!=M1) || (space.mem[ofs+1]!=M2))
-           throw new RuntimeException("no magic word: ofs="+ofs+" bytes="+space.mem[ofs]+","+space.mem[ofs+1]);
+        if ((space.getByte(ofs)!=M1) || (space.getByte(ofs+1)!=M2))
+           throw new RuntimeException("no magic word: ofs="+ofs+" bytes="+space.getByte(ofs)+","+space.getByte(ofs+1));
 
     }
 
@@ -335,7 +339,7 @@ public class EncodedObjectHeap extends EncodedObjectStore {
     }
 
     public void checkDebugFooter(Space space,int ofs) {
-        if(ofs>space.mem.length-debugHeaderSize) return;
+        if(ofs>space.spaceSize()-debugHeaderSize) return;
         checkDeugMagicWord(space,ofs);
     }
 
@@ -362,8 +366,8 @@ public class EncodedObjectHeap extends EncodedObjectStore {
 
         checkDebugHeader(objectSpace,internalOfs);
         // Now check that either both have indexes or none
-        long oldLeftOfs =ObjectIO.getLong5(objectSpace.mem,internalOfs+F1);
-        long oldRightOfs=ObjectIO.getLong5(objectSpace.mem,internalOfs+F2);
+        long oldLeftOfs =objectSpace.getLong5(internalOfs+F1);
+        long oldRightOfs=objectSpace.getLong5(internalOfs+F2);
         if ((!verifyOfsChange(oldRightOfs,rightOfs)) ||
                 (!verifyOfsChange(oldLeftOfs,leftOfs)))
             //System.exit(1);
@@ -384,7 +388,7 @@ public class EncodedObjectHeap extends EncodedObjectStore {
             int oldSpaceNum  = objectSpaceNum;
             Space oldSpace = spaces[oldSpaceNum];
 
-            int len = (int) oldSpace.mem[internalOfs];
+            int len = (int) oldSpace.getByte(internalOfs);
 
             Space newSpace = spaces[curSpaceNum];
             int consumedSpace = debugHeaderSize+len + F3;
@@ -401,12 +405,13 @@ public class EncodedObjectHeap extends EncodedObjectStore {
             // the debug footer
             int retPos = newSpace.memTop;
             checkDebugHeader(newSpace,retPos);
+
             // Here we copy the encoded message plus the length (1 byte)
-            System.arraycopy(oldSpace.mem, internalOfs, newSpace.mem, retPos, len + F1);
+            oldSpace.copyBytes(internalOfs, newSpace, retPos, len + F1);
             checkDebugHeader(newSpace,retPos);
             // This are the new offsets
-            ObjectIO.putLong5(newSpace.mem, newSpace.memTop + F1, leftOfs);
-            ObjectIO.putLong5(newSpace.mem, newSpace.memTop + F2, rightOfs);
+            newSpace.putLong5( newSpace.memTop + F1, leftOfs);
+            newSpace.putLong5( newSpace.memTop + F2, rightOfs);
             checkbug();
 
             writeDebugFooter(newSpace,retPos+len+F3);
@@ -415,10 +420,10 @@ public class EncodedObjectHeap extends EncodedObjectStore {
             return buildPointer(curSpaceNum, retPos);
         } else {
             // only child references changed
-            ObjectIO.putLong5(objectSpace.mem, internalOfs+F1, leftOfs);
-            ObjectIO.putLong5(objectSpace.mem, internalOfs + F2, rightOfs);
+            objectSpace.putLong5( internalOfs+F1, leftOfs);
+            objectSpace.putLong5(internalOfs + F2, rightOfs);
             checkDebugHeader(objectSpace,internalOfs);
-            int len = objectSpace.mem[internalOfs];
+            int len = objectSpace.getByte(internalOfs);
             checkDebugFooter(objectSpace,internalOfs+len);
             checkbug();
             return ofs;
@@ -431,13 +436,14 @@ public class EncodedObjectHeap extends EncodedObjectStore {
         long ofs = 161722718; // 47958557;
         int objectSpaceNum = getSpaceNumOfPointer(ofs);
         int internalOfs  = getSpaceOfsFromPointer(objectSpaceNum,ofs);
-        if (spaces[objectSpaceNum].mem==null) return;
-        byte v =spaces[objectSpaceNum].mem[internalOfs+11+70];
+        if (spaces[objectSpaceNum].empty()) return;
+        byte v =spaces[objectSpaceNum].getByte(internalOfs+11+70);
         if (v==(byte)-1) {
             System.out.println("problem!");
             bug = true;
         }
     }
+
     public Space getCurSpace() {
         return spaces[curSpaceNum];
     }
@@ -449,8 +455,7 @@ public class EncodedObjectHeap extends EncodedObjectStore {
 
 
     public int getMemSize() {
-
-        return getCurSpace().mem.length;
+        return getCurSpace().spaceSize();
 
     }
 
@@ -600,9 +605,9 @@ public class EncodedObjectHeap extends EncodedObjectStore {
         if (encoded.length>127)
             throw new RuntimeException("too long");
             //System.exit(1);
-        space.mem[space.memTop] =(byte) encoded.length; // max 127 bytes
-        ObjectIO.putLong5(space.mem,space.memTop+F1,leftOfs);
-        ObjectIO.putLong5(space.mem,space.memTop+F2,rightOfs);
+        space.putByte(space.memTop,(byte) encoded.length); // max 127 bytes
+        space.putLong5(space.memTop+F1,leftOfs);
+        space.putLong5(space.memTop+F2,rightOfs);
 
         /*long rleftOfs=ObjectIO.getLong5(space.mem, space.memTop+F1);
         long rrightOfs=ObjectIO.getLong5(space.mem, space.memTop+F2);
@@ -610,7 +615,7 @@ public class EncodedObjectHeap extends EncodedObjectStore {
             throw new RuntimeException("bad encoding");
          */
         space.memTop +=F3;
-        System.arraycopy(encoded,0,space.mem,space.memTop,encoded.length);
+        space.setBytes(space.memTop,encoded,0,encoded.length);
         space.memTop += len;
         writeDebugFooter(space,space.memTop);
         space.memTop +=debugHeaderSize;
@@ -628,8 +633,8 @@ public class EncodedObjectHeap extends EncodedObjectStore {
         int ptrSpaceNum = getSpaceNumOfPointer(encodedOfs);
         space = spaces[ptrSpaceNum];
         int internalOfs = getSpaceOfsFromPointer(ptrSpaceNum,encodedOfs);
-        byte[] d = new byte[space.mem[internalOfs]];
-        System.arraycopy(space.mem,internalOfs+F3,d,0,d.length);
+        byte[] d = new byte[space.getByte(internalOfs)];
+        space.getBytes(internalOfs+F3,d,0,d.length);
         return d;
     }
 
@@ -646,11 +651,11 @@ public class EncodedObjectHeap extends EncodedObjectStore {
         ObjectReference r = new ObjectReference();
         checkDebugHeader(space,internalOfs);
         // Get the max size window
-        r.len = space.mem[internalOfs];
+        r.len = space.getByte(internalOfs);
         checkDebugFooter(space,internalOfs+F3+r.len);
-        r.leftRef = new LongEOR(ObjectIO.getLong5(space.mem, internalOfs+F1));
-        r.rightRef =new LongEOR(ObjectIO.getLong5(space.mem, internalOfs+F2));
-        r.message = ByteBuffer.wrap(space.mem,internalOfs+F3,r.len);
+        r.leftRef = new LongEOR(space.getLong5( internalOfs+F1));
+        r.rightRef =new LongEOR(space.getLong5(internalOfs+F2));
+        r.message = space.getByteBuffer(internalOfs+F3,r.len);
         return r;
     }
 
@@ -681,12 +686,12 @@ public class EncodedObjectHeap extends EncodedObjectStore {
         if (!headOfFilledSpaces.empty()) {
             int head = headOfFilledSpaces.peekFirst();
             while (head != -1) {
-                total += spaces[head].mem.length;
+                total += spaces[head].spaceSize();
                 head = spaces[head].previousSpaceNum;
 
             }
         }
-        total +=spaces[curSpaceNum].mem.length;
+        total +=spaces[curSpaceNum].spaceSize();
         return total;
     }
 
@@ -704,12 +709,12 @@ public class EncodedObjectHeap extends EncodedObjectStore {
             int head = headOfFilledSpaces.peekFirst();
             while (head != -1) {
                 used += spaces[head].memTop;
-                total += spaces[head].mem.length;
+                total += spaces[head].spaceSize();
                 head = spaces[head].previousSpaceNum;
             }
         }
         used+=spaces[curSpaceNum].memTop;
-        total +=spaces[curSpaceNum].mem.length;
+        total +=spaces[curSpaceNum].spaceSize();
 
         total +=getEmptySpacesCount()*1L*spaceSize; // This have not yet been created but may be created later.
 

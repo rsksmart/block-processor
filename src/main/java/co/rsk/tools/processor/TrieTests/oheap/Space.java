@@ -6,12 +6,16 @@ import co.rsk.tools.processor.examples.storage.ObjectIO;
 import co.rsk.tools.processor.examples.storage.StorageDumperToFile;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 
-public class Space {
+public abstract class Space {
 
     public int memTop = 0;
-    public byte[] mem;
 
 
     public boolean filled;
@@ -19,9 +23,79 @@ public class Space {
     public int previousSpaceNum = -1; // unlinked
 
 
+    /**
+     * Reads a byte from the specified position.
+     * @param pos the position in the memory mapped file
+     * @return the value read
+     */
+    abstract public byte getByte(long pos) ;
+
+    /**
+     * Reads an int from the specified position.
+     * @param pos the position in the memory mapped file
+     * @return the value read
+     */
+    abstract public int getInt(long pos);
+
+    /**
+     * Reads a long from the specified position.
+     * @param pos position in the memory mapped file
+     * @return the value read
+     */
+    abstract public long getLong(long pos);
+
+    /**
+     * Writes a byte to the specified position.
+     * @param pos the position in the memory mapped file
+     * @param val the value to write
+     */
+    abstract public void putByte(long pos, byte val);
+
+    /**
+     * Writes an int to the specified position.
+     * @param pos the position in the memory mapped file
+     * @param val the value to write
+     */
+    abstract public void putInt(long pos, int val);
+
+    /**
+     * Writes a long to the specified position.
+     * @param pos the position in the memory mapped file
+     * @param val the value to write
+     */
+    abstract public void putLong(long pos, long val);
+
+    /**
+     * Reads a buffer of data.
+     * @param pos the position in the memory mapped file
+     * @param data the input buffer
+     * @param offset the offset in the buffer of the first byte to read data into
+     * @param length the length of the data
+     */
+    abstract public void getBytes(long pos, byte[] data, int offset, int length);
+
+    /**
+     * Writes a buffer of data.
+     * @param pos the position in the memory mapped file
+     * @param data the output buffer
+     * @param offset the offset in the buffer of the first byte to write
+     * @param length the length of the data
+     */
+    abstract public void setBytes(long pos, byte[] data, int offset, int length);
+
+    abstract public long getLong5(int off);
+
+    abstract public void putLong5(int off, long val) ;
+
+    abstract public void copyBytes(int srcPos, Space dest, int destPos, int length);
+
+    abstract public  ByteBuffer getByteBuffer(int offset, int length);
+
+    public boolean created() {
+        return true;
+    }
+
     public void create(int size) {
-        if (mem == null)
-            mem = new byte[size];
         memTop = 0;
         inUse = true;
     }
@@ -31,7 +105,6 @@ public class Space {
     }
 
     public void destroy() {
-        mem = null;
         filled = false;
     }
 
@@ -51,8 +124,10 @@ public class Space {
         return (!inUse);
     }
 
+    abstract public int spaceSize();
+
     public int spaceAvail() {
-        return mem.length - memTop;
+        return spaceSize() - memTop;
     }
 
     public boolean spaceAvailFor(int msgLength) {
@@ -60,71 +135,12 @@ public class Space {
     }
 
     public int getUsagePercent() {
-        return (int) ((long) memTop * 100 / mem.length);
+        return (int) ((long) memTop * 100 / spaceSize());
     }
 
-    public void readFromFile(String fileName) {
+    abstract public void readFromFile(String fileName,boolean map);
 
-        // Now load it all again and put it on a hashmap.
-        // We'll see how much time it takes.
-        long started = System.currentTimeMillis();
-
-        InputStream in;
-
-        try {
-
-            //in = new BufferedInputStream(new FileInputStream(fileName));
-            in = new FileInputStream(fileName);
-            System.out.println("Used Before MB: " + (double) (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024 / 1024);
-
-
-            try {
-                int avail =in.available();
-
-                //mem = ObjectIO.readNBytes(in,avail);
-                if (in.read(mem,0,avail)!=avail) {
-                    throw new RuntimeException("not enough data");
-                }
-                memTop = avail;
-            }
-            catch (EOFException exc)
-            {
-                // end of stream
-            }
-            long currentTime = System.currentTimeMillis();
-            System.out.println("Time[s]: "+(currentTime-started)/1000);
-
-          System.out.println("Used After MB: " + (double) (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1024/ 1024);
-
-            //
-            in.close();
-
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        //out.writeObject(s1);
-
-
-    }
-
-    public void saveToFile(String fileName )  {
-
-        try {
-        //out = new BufferedOutputStream(new FileOutputStream(fileName));
-        FileOutputStream out = new FileOutputStream(fileName);
-        out.write(mem,0,memTop);
-        out.flush();
-        //closing the stream
-        out.close();
-        System.out.println("File "+fileName+" written.");
-    } catch (FileNotFoundException e) {
-        e.printStackTrace();
-    } catch (IOException e) {
-        e.printStackTrace();
-    }
-    }
+    abstract public void saveToFile(String fileName );
 
 
 }

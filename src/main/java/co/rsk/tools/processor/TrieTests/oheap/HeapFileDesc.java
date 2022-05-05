@@ -10,6 +10,7 @@ public class HeapFileDesc {
     public int[] emptySpaces;
     public int currentSpace;
     public long rootOfs;
+    public int metadataLen;
 
     public void saveToFile(String fileName) {
         try {
@@ -19,6 +20,8 @@ public class HeapFileDesc {
             writeArray(out,emptySpaces);
             ObjectIO.writeInt(out,currentSpace);
             ObjectIO.writeLong(out,rootOfs);
+            ObjectIO.writeInt(out,metadataLen);
+
             out.flush();
             //closing the stream
             out.close();
@@ -49,6 +52,7 @@ public class HeapFileDesc {
             d.emptySpaces = loadArray(in);
             d.currentSpace = ObjectIO.readInt(in);
             d.rootOfs = ObjectIO.readLong(in);
+            d.metadataLen = ObjectIO.readInt(in);
             in.close();
 
 

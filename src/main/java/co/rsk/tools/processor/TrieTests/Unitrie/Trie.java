@@ -310,7 +310,8 @@ public interface Trie {
     abstract public boolean wasSaved();
 
     abstract public Trie markAsSaved();
-    abstract public long countNodes(long limit);
-    abstract public long countLeafNodes(long limit);
+    abstract public long countNodes(long limit,int depthLimit, Updater updater);
+    abstract public long countLeafNodes(long limit,int depthLimit,Updater updater);
 
+    void accessThisNode();
 }

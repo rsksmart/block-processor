@@ -2,7 +2,6 @@ package co.rsk.tools.processor.TrieTests.Unitrie;
 
 import co.rsk.core.types.ints.Uint8;
 import co.rsk.crypto.Keccak256;
-import co.rsk.tools.processor.TrieTests.ohmap.HashEOR;
 import org.ethereum.crypto.Keccak256Helper;
 
 import java.nio.ByteBuffer;
@@ -18,7 +17,7 @@ public class NodeReferenceImpl implements NodeReference {
     // lazy (it may not be present). However this class will always need lazyHash
     // to be present UNLESS the node referenced is empty.
     protected Keccak256 lazyHash;
-    protected boolean loadedFromStore;
+    protected boolean presentInTrieStore;
 
     public NodeReferenceImpl(TrieStore store,  Trie node, Keccak256 hash) {
         this.store = store;
@@ -27,7 +26,7 @@ public class NodeReferenceImpl implements NodeReference {
         } else {
             this.lazyHash = hash;
             if (node!=null)
-                this.loadedFromStore = node.wasSaved();
+                this.presentInTrieStore = node.wasSaved();
             if (hash!=null) {
                 this.lazyHash = hash;
             }
@@ -66,11 +65,11 @@ public class NodeReferenceImpl implements NodeReference {
         if (!node.isPresent()) {
             //logger.error("Broken database, execution can't continue");
             //System.exit(1);
-            throw new RuntimeException("not present");
+            throw new RuntimeException("not present: "+lazyHash.toHexString());
             //return Optional.empty();
         }
 
-        loadedFromStore = true;
+        presentInTrieStore = true;
 
         return node;
     }
@@ -118,8 +117,12 @@ public class NodeReferenceImpl implements NodeReference {
     }
 
     // the referenced node was loaded from a TrieStore
-    public boolean wasLoaded() {
-        return loadedFromStore;
+    public boolean isPresentInTrieStore() {
+        return presentInTrieStore;
+    }
+
+    public void markAsPresentInTrieStore() {
+        presentInTrieStore = true;
     }
 
     // This method should only be called from save()

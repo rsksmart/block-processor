@@ -2,12 +2,9 @@ package co.rsk.tools.processor.TrieTests.orefheap;
 
 import co.rsk.tools.processor.TrieTests.Unitrie.ByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.ENC.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ObjectReference;
-import co.rsk.tools.processor.TrieTests.oheap.HeapFileDesc;
-import co.rsk.tools.processor.TrieTests.oheap.Space;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
-import org.ethereum.util.ByteUtil;
 
 import java.nio.ByteBuffer;
 import java.util.*;

@@ -1,7 +1,11 @@
-package co.rsk.tools.processor.TrieTests.Unitrie;
+package co.rsk.tools.processor.TrieTests.Unitrie.DNC2;
 
 import co.rsk.core.types.ints.Uint24;
 import co.rsk.crypto.Keccak256;
+import co.rsk.tools.processor.TrieTests.Unitrie.NodeReference;
+import co.rsk.tools.processor.TrieTests.Unitrie.TrieImpl;
+import co.rsk.tools.processor.TrieTests.Unitrie.TrieStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.VarInt;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 
 public class TrieWithDNC extends TrieImpl {

@@ -21,6 +21,7 @@ package co.rsk.tools.processor.TrieTests.Unitrie.store;
 import co.rsk.tools.processor.TrieTests.Logger;
 import co.rsk.tools.processor.TrieTests.LoggerFactory;
 import co.rsk.tools.processor.TrieTests.Unitrie.*;
+import co.rsk.tools.processor.TrieTests.Unitrie.DNC.DecodedNodeCache;
 import org.ethereum.datasource.KeyValueDataSource;
 
 
@@ -69,6 +70,12 @@ public class TrieStoreImpl implements TrieStore {
     public boolean isTraceEnabled() {
         return false;
     }
+
+    @Override
+    public void saveRoot(Trie trie) {
+        save(trie);
+    }
+
     /**
      * Recursively saves all unsaved nodes of this trie to the underlying key-value store
      */
@@ -125,16 +132,18 @@ public class TrieStoreImpl implements TrieStore {
 
         NodeReference leftNodeReference = trie.getLeft();
 
-        if (!leftNodeReference.wasLoaded()) {
+        if (!leftNodeReference.isPresentInTrieStore()) {
             logger.trace("Start left trie. Level: {}", level);
             leftNodeReference.getNode().ifPresent(t -> save(t, false, level + 1));
+            leftNodeReference.markAsPresentInTrieStore();
         }
 
         NodeReference rightNodeReference = trie.getRight();
 
-        if (!rightNodeReference.wasLoaded()) {
+        if (!rightNodeReference.isPresentInTrieStore()) {
             logger.trace("Start right trie. Level: {}", level);
             rightNodeReference.getNode().ifPresent(t -> save(t, false, level + 1));
+            rightNodeReference.markAsPresentInTrieStore();
         }
 
         if (trie.hasLongValue()) {
@@ -167,6 +176,11 @@ public class TrieStoreImpl implements TrieStore {
     @Override
     public void flush(){
         this.store.flush();
+    }
+
+    @Override
+    public Optional<Trie> retrieveRoot(byte[] hash) {
+        return retrieve(hash);
     }
 
     @Override

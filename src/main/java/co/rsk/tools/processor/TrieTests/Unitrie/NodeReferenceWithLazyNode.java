@@ -97,4 +97,6 @@ public class NodeReferenceWithLazyNode extends NodeReferenceImpl {
     public void removeLazyNode() {
             lazyNode = null; // bye bye
     }
+
+
 }

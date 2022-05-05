@@ -3,10 +3,13 @@ package co.rsk.tools.processor.TrieTests.Unitrie.store;
 
 import co.rsk.tools.processor.TrieTests.Unitrie.AbstractByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.ByteArrayRefHeap;
+import co.rsk.tools.processor.TrieTests.Unitrie.FileMapUtil;
 import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
 
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -29,7 +32,11 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
     transient int modCount;
     int threshold;
     float loadFactor;
-    public int hashMapCount;
+
+    // The average number of slot checks per lookup is tableSlotChecks/tableLookups
+    public int tableSlotChecks;
+    public int tableLookups;
+
     int maxElements;
     boolean logEvents = true;
 
@@ -105,6 +112,10 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
                 this.baHeap = sharedBaHeap;
         }
 
+    }
+
+    public AbstractByteArrayRefHeap getByteArrayHashMap() {
+        return this.baHeap;
     }
 
     ByteArrayRefHeap createByteArrayHeap(long initialCapacity, long newBeHeapCapacity)  {
@@ -227,6 +238,7 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
 
     // Returns a handle or -1 if no node was found (it does not return empty)
     final int getNode(int hash, Object key) {
+        tableLookups++;
         if (table==null)
             return -1;
         int n = table.length;
@@ -235,6 +247,7 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
         int markedHandle;
         do {
             markedHandle  = table[idx];
+            tableSlotChecks++;
             if (markedHandle == empty)
                 return -1;
             if (!isValueHandle(markedHandle)) {
@@ -439,7 +452,6 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
             newThr = newCap < 1073741824 && ft < 1.07374182E9F ? (int)ft : 2147483647;
         }
 
-        hashMapCount =0;
         this.threshold = newThr;
         int[] newTab = new int[newCap];
         Arrays.fill( newTab, empty );
@@ -1060,6 +1072,57 @@ public class ByteArrayHashMap  extends AbstractMap<ByteArrayWrapper, byte[]> imp
 
         }
     }
+
+    public void readFromFile(String fileName,boolean map) throws IOException {
+        File file = new File(fileName);
+        FileInputStream fin = new FileInputStream(file);
+        BufferedInputStream bin = new BufferedInputStream(fin);
+        DataInputStream din = new DataInputStream(bin);
+
+        int count = //(int) ((file.length()-8) / 4);
+            din.readInt();
+        size = din.readInt();
+        threshold = din.readInt();
+        table = new int[count];
+        System.out.println("reading hash table");
+        for (int i = 0; i < count; i++) {
+            table[i] = din.readInt();
+        }
+        System.out.println("done");
+        din.close();
+
+    }
+
+    public void saveToFile(String fileName ) throws IOException {
+        //FileOutputStream out = new FileOutputStream(fileName);
+        RandomAccessFile sc
+                = new RandomAccessFile(fileName, "rw");
+        FileChannel file = sc.getChannel();
+
+        // Size cannot exceed Integer.MAX_VALUE !! Horrible thing in file.map().
+        // However, we can map in parts.
+        ByteBuffer buf = file.map(FileChannel.MapMode.READ_WRITE, 0,
+                4L * 3);
+        buf.putInt(table.length);
+        buf.putInt(size);
+        buf.putInt(threshold);
+        FileMapUtil.mapAndCopyIntArray(file,4*3,table.length,table);
+        file.close();
+        /* Slower
+        DataOutputStream os = new DataOutputStream(
+                new FileOutputStream(fileName));
+
+        //write the length first so that you can later know how many ints to read
+        os.writeInt(table.length);
+        os.writeInt(size);
+        os.writeInt(threshold);
+        for (int i =0 ; i < table.length; ++i){
+            os.writeInt(table[i]);
+        }
+        os.close();
+         */
+    }
+
 
 }
 

@@ -1,4 +1,6 @@
-package co.rsk.tools.processor.TrieTests.Unitrie;
+package co.rsk.tools.processor.TrieTests.Unitrie.ENC;
+
+import co.rsk.tools.processor.TrieTests.Unitrie.ENC.EncodedObjectStore;
 
 public class GlobalEncodedObjectStore {
     static EncodedObjectStore encodedObjectStore;

@@ -56,7 +56,10 @@ public interface NodeReference {
     public boolean isEmbeddable();
 
     // the referenced node was loaded from a TrieStore
-    public boolean wasLoaded();
+    // or has been saved already in the TrieStore
+    public boolean isPresentInTrieStore();
+
+    public void markAsPresentInTrieStore();
 
     // This method should only be called from save()
     public int serializedLength();

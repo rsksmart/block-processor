@@ -20,6 +20,7 @@ import static org.ethereum.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 public class TrieImpl implements Trie {
 
+    public static long trieNodesRetrieved = 0;
     protected static final Profiler profiler = ProfilerFactory.getInstance();
     protected static final int ARITY = 2;
     protected static final String INVALID_VALUE_LENGTH = "Invalid value length";
@@ -73,9 +74,9 @@ public class TrieImpl implements Trie {
     // shared Path
     protected final TrieKeySlice sharedPath;
 
-    static boolean tryToCompress = true;
 
-    boolean isEmbedded;
+
+    protected boolean isEmbedded;
 
     // default constructor, no secure
     public TrieImpl() {
@@ -107,19 +108,15 @@ public class TrieImpl implements Trie {
         return isEmb;
     }
 
-    public TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value, NodeReference left, NodeReference right, Uint24 valueLength, Keccak256 valueHash) {
+    /*public TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value,
+                    NodeReference left, NodeReference right,
+                    Uint24 valueLength, Keccak256 valueHash) {
 
         this(store, sharedPath, value, left, right, valueLength, valueHash, null,
                 isEmbeddable(sharedPath, left,  right, valueLength));
     }
 
 
-
-    protected void changeSaved() {
-    }
-
-    protected void storeNodeInMem() {
-    }
 
     protected TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value,
                  NodeReference left, NodeReference right,
@@ -131,6 +128,8 @@ public class TrieImpl implements Trie {
                 childrenSize,
                 isEmbeddable(sharedPath, left,  right, valueLength));
     }
+
+     */
 
     // full constructor
     protected TrieImpl(TrieStore store, TrieKeySlice sharedPath, byte[] value,
@@ -147,13 +146,21 @@ public class TrieImpl implements Trie {
         this.valueHash = valueHash;
         this.childrenSize = childrenSize;
         checkValueLength();
+        accessThisNode();
+    }
+
+
+
+    protected void changeSaved() {
+    }
+
+    protected void storeNodeInMem() {
+    }
+
+    public void accessThisNode() {
 
     }
 
-   /* public void accessThisNode() {
-        if (store!=null)
-            store.accessNode(this);
-    }*/
 
 
 
@@ -619,6 +626,7 @@ public class TrieImpl implements Trie {
     }
 
     public  Trie retrieveNode(byte implicitByte,boolean persistent) {
+        trieNodesRetrieved++;
         Trie node = getNodeReference(implicitByte).getNode(persistent).orElse(null);
         //if (node!=null)
         //    node.accessThisNode();
@@ -718,7 +726,8 @@ public class TrieImpl implements Trie {
                 return this;
             }
 
-            Trie ret = this.split(commonPath).put(key, value, isRecursiveDelete);
+            Trie ret = this.split(commonPath);
+            ret = ret.put(key, value, isRecursiveDelete);
             return ret;
         }
         // The key to insert is longer than our key ?
@@ -750,7 +759,7 @@ public class TrieImpl implements Trie {
                     this.right,
                     getDataLength(value),
                     null,
-                    this.childrenSize
+                    this.childrenSize,null
             );
         }
 
@@ -808,13 +817,15 @@ public class TrieImpl implements Trie {
     private Trie split(TrieKeySlice commonPath) {
         int commonPathLength = commonPath.length();
         TrieKeySlice newChildSharedPath = sharedPath.slice(commonPathLength + 1, sharedPath.length());
-        Trie newChildTrie = store.getTrieFactory().newTrie(this.store, newChildSharedPath, this.value, this.left, this.right, this.valueLength, this.valueHash, this.childrenSize);
+        Trie newChildTrie = store.getTrieFactory().newTrie(this.store, newChildSharedPath, this.value, this.left, this.right, this.valueLength, this.valueHash, this.childrenSize,null);
         NodeReference newChildReference = store.getNodeReferenceFactory().newReference(this.store, newChildTrie);
 
         // this bit will be implicit and not present in a shared path
         byte pos = sharedPath.get(commonPathLength);
 
-        VarInt childrenSize = new VarInt(newChildReference.referenceSize());
+        // Do not compute childrenSize to avoid serializing objects that
+        // may be discarded.
+        VarInt childrenSize = null; // new VarInt(newChildReference.referenceSize());
         NodeReference newLeft;
         NodeReference newRight;
         if (pos == 0) {
@@ -825,7 +836,7 @@ public class TrieImpl implements Trie {
             newRight = newChildReference;
         }
 
-        return store.getTrieFactory().newTrie(this.store, commonPath, null, newLeft, newRight, Uint24.ZERO, null, childrenSize);
+        return store.getTrieFactory().newTrie(this.store, commonPath, null, newLeft, newRight, Uint24.ZERO, null, childrenSize,null);
     }
 
     public boolean isTerminal() {
@@ -1078,9 +1089,15 @@ public class TrieImpl implements Trie {
         changeSaved();
         return this;
     }
+    final int updaterInterval = 5_000;
 
-    public long countNodes(long limit) {
+    public long countNodes(long limit,int depthLimit,Updater updater) {
         long nodes = 1;
+
+        if (depthLimit<=1)
+            return 1;
+
+        depthLimit--;
         limit--;
         if (limit>0)
             for (byte k = 0; k < ARITY; k++) {
@@ -1089,8 +1106,15 @@ public class TrieImpl implements Trie {
                 if (node == null) {
                     continue;
                 }
-                long c =node.countNodes(limit);
+
+                long c =node.countNodes(limit,depthLimit,updater);
                 nodes +=c;
+                if (updater!=null)  {
+                    updater.callCount++;
+                    if (updater.callCount % updaterInterval==0)
+                        updater.update();
+                }
+
                 limit -=c;
                 if (limit<=0)
                     break;
@@ -1098,9 +1122,12 @@ public class TrieImpl implements Trie {
         return nodes;
     }
 
-    public long countLeafNodes(long limit) {
+    public long countLeafNodes(long limit,int depthLimit, Updater updater) {
         if (limit<=0)
             return 0;
+        if (depthLimit==1)
+            return 1;
+        depthLimit--;
         long nodes = 0;
         for (byte k = 0; k < ARITY; k++) {
             Trie node = this.retrieveNode(k);
@@ -1108,8 +1135,14 @@ public class TrieImpl implements Trie {
             if (node == null) {
                 continue;
             }
-            long c = node.countLeafNodes(limit);
+            long c = node.countLeafNodes(limit,depthLimit,updater);
             nodes +=c;
+
+            if (updater!=null)  {
+                updater.callCount++;
+                if (updater.callCount % updaterInterval==0)
+                    updater.update();
+            }
             limit -=c;
             if (limit<=0)
                 break;

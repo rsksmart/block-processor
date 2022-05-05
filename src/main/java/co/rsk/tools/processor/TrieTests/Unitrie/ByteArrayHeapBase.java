@@ -1,12 +1,19 @@
 package co.rsk.tools.processor.TrieTests.Unitrie;
 
+import co.rsk.tools.processor.TrieTests.oheap.DirectAccessSpace;
 import co.rsk.tools.processor.TrieTests.oheap.HeapFileDesc;
+import co.rsk.tools.processor.TrieTests.oheap.MemoryMappedSpace;
 import co.rsk.tools.processor.TrieTests.oheap.Space;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
 
-
+// This class represents a heap where elements are addressed by their physical
+// position on the heap.
 public class ByteArrayHeapBase {
     // The number of maxObjects must be at least 5 times higher than the number of
     // elements that will be inserted in the trie because intermediate nodes
@@ -25,8 +32,8 @@ public class ByteArrayHeapBase {
 
     public int megas;
     public int spaceSize;
-    final int maxSpaces;
-    public final long MaxPointer;
+    int maxSpaces;
+    long MaxPointer;
     final int freeSpaces;
     final int compressSpaces; // == maxSpaces means compress all
 
@@ -41,13 +48,15 @@ public class ByteArrayHeapBase {
     SpaceHead headOfFilledSpaces = new SpaceHead();
 
     int curSpaceNum;
-    boolean remapping;
+    boolean memoryMapped;
+    String baseFileName;
+    int lastMetadataLen = -1;
 
+    /////////////////////////// Only used for remapping
+    boolean remapping;
     long remappedSize;
     int compressionPercent;
-
-
-
+    ///////////////////////////
     public ByteArrayHeapBase() {
         megas = default_spaceMegabytes;
         maxSpaces = default_maxSpaces;
@@ -55,8 +64,24 @@ public class ByteArrayHeapBase {
         compressSpaces = default_compressSpaces;
         remapThreshold = default_remapThreshold;
         spaceSize = megas * 1000 * 1000;
-        MaxPointer = 1L * maxSpaces * spaceSize;
+        resetInternalConstants();
+        memoryMapped = false;
         // Must call initialize
+    }
+
+    public void resetInternalConstants() {
+        MaxPointer = 1L * maxSpaces * spaceSize;
+    }
+
+    public void setFileMapping(boolean fileMapping) {
+        // when using memory mapping maxSpaces should be set dynamically so
+        // that every space fits in RAM.
+
+        memoryMapped = fileMapping;
+    }
+
+    public void setFileName(String fileName) {
+        baseFileName = fileName;
     }
 
     public void initialize() {
@@ -65,56 +90,80 @@ public class ByteArrayHeapBase {
     }
 
     public long getMaxMemory() {
-        return spaceSize * maxSpaces;
+        return 1L*spaceSize * maxSpaces;
     }
 
-    public void setMaxMemory(long m) {
-        long q = m / maxSpaces;
+    long desiredMaxMemory;
+
+    public void computeSpaceSizes() {
+        if (memoryMapped) {
+            // Dynamically set the number of spaces. Half a gigabyte each.
+            int desiredSpaceSize =  (1<<29);
+            maxSpaces = (int) ((desiredMaxMemory+desiredSpaceSize-1)/desiredSpaceSize);
+            spaceSize = desiredSpaceSize;
+        }
+        long q = desiredMaxMemory / maxSpaces;
         if (q > Integer.MAX_VALUE)
             throw new RuntimeException("Cannot support memory requested");
         spaceSize = (int) q;
         megas = (int) (getMaxMemory() / 1000 / 1000);
     }
 
-    public void save(String fileName, long rootOfs) {
+    public void setMaxMemory(long m) {
+        desiredMaxMemory = m;
+    }
 
-        int head = headOfFilledSpaces.head;
-        while (head != -1) {
-            spaces[head].saveToFile(fileName + "." + head + ".space");
-            head = spaces[head].previousSpaceNum;
+    public void save(long rootOfs) throws IOException {
+        if (!memoryMapped) {
+            int head = headOfFilledSpaces.head;
+            while (head != -1) {
+                spaces[head].saveToFile(getSpaceFileName(head));
+                head = spaces[head].previousSpaceNum;
+            }
+            head = headOfPartiallyFilledSpaces.head;
+            while (head != -1) {
+                spaces[head].saveToFile(getSpaceFileName( head));
+                head = spaces[head].previousSpaceNum;
+            }
+            getCurSpace().saveToFile(getSpaceFileName( curSpaceNum));
         }
-        head = headOfPartiallyFilledSpaces.head;
-        while (head != -1) {
-            spaces[head].saveToFile(fileName + "." + head + ".space");
-            head = spaces[head].previousSpaceNum;
-        }
+        saveDesc(rootOfs);
+    }
 
-        getCurSpace().saveToFile(fileName + "." + curSpaceNum + ".space");
+    void saveDesc(long rootOfs ) {
         HeapFileDesc desc = new HeapFileDesc();
         desc.filledSpaces = getSpaces(headOfFilledSpaces);
         desc.emptySpaces = getSpaces(headOfPartiallyFilledSpaces);
         desc.currentSpace = curSpaceNum;
         desc.rootOfs = rootOfs;
-        desc.saveToFile(fileName + ".desc");
-
+        desc.metadataLen = lastMetadataLen;
+        desc.saveToFile(baseFileName + ".desc");
     }
 
-    public long load(String fileName) {
-        HeapFileDesc desc = HeapFileDesc.loadFromFile(fileName + ".desc");
+
+    public long load() throws IOException {
+        HeapFileDesc desc = HeapFileDesc.loadFromFile(baseFileName + ".desc");
         setHead(headOfFilledSpaces, desc.filledSpaces, true);
         setHead(headOfPartiallyFilledSpaces, desc.emptySpaces, false);
 
         for (int i = 0; i < desc.filledSpaces.length; i++) {
             int num = desc.filledSpaces[i];
-            spaces[num].readFromFile(fileName + "." + num + ".space");
+            String name = getSpaceFileName(num);
+            spaces[num].readFromFile(name,memoryMapped);
         }
         // This are partially filled spaces
         for (int i = 0; i < desc.emptySpaces.length; i++) {
             int num = desc.emptySpaces[i];
-            spaces[num].readFromFile(fileName + "." + num + ".space");
+            String name = getSpaceFileName( num);
+            // Empty spaces do not need to be read from a file
+            // What they need is a method of delayed mapped creation,
+            // that already exists.
+            // spaces[num].readFromFile(name,memoryMapped);
         }
         curSpaceNum = desc.currentSpace;
-        spaces[curSpaceNum].readFromFile(fileName + "." + curSpaceNum + ".space");
+        lastMetadataLen = desc.metadataLen;
+        String name = getSpaceFileName(curSpaceNum);
+        spaces[curSpaceNum].readFromFile(name,memoryMapped);
         return desc.rootOfs;
     }
 
@@ -221,19 +270,27 @@ public class ByteArrayHeapBase {
     public int getNewSpaceNum() {
         int s = headOfPartiallyFilledSpaces.removeFirst();
         if (spaces[s].empty())
-            spaces[s].create(spaceSize);
+            createSpace(s);
         spaces[s].unlink();
         return s;
     }
 
+    public Space newSpace() {
+        if (memoryMapped)
+            return new MemoryMappedSpace();
+        else
+            return new DirectAccessSpace();
+    }
+
     public void reset() {
-
-
+        computeSpaceSizes();
+        resetInternalConstants();
         headOfPartiallyFilledSpaces.clear();
         spaces = new Space[maxSpaces];
 
-        for (int i = 0; i < maxSpaces; i++) {
-            spaces[i] = new Space();
+        // Add them in reverse order so the first to take is always 0.
+        for (int i = maxSpaces-1; i >=0; i--) {
+            spaces[i] = newSpace();
             headOfPartiallyFilledSpaces.addSpace(i);
         }
         curSpaceNum = getNewSpaceNum();
@@ -399,20 +456,20 @@ public class ByteArrayHeapBase {
     final int M2 = 74;
 
     public void writeDebugFooter(Space space, int ofs) {
-        if (ofs > space.mem.length - debugHeaderSize) return;
-        space.mem[ofs] = M1;
-        space.mem[ofs + 1] = M2;
+        if (ofs > space.spaceSize() - debugHeaderSize) return;
+        space.putByte(ofs,(byte)M1);
+        space.putByte(ofs + 1, (byte)M2);
     }
 
     public void writeDebugHeader(Space space, int ofs) {
         if (ofs < debugHeaderSize) return;
-        space.mem[ofs - 2] = M1;
-        space.mem[ofs - 1] = M2;
+        space.putByte(ofs - 2, (byte) M1);
+        space.putByte(ofs - 1, (byte) M2);
     }
 
     public void checkDeugMagicWord(Space space, int ofs) {
-        if ((space.mem[ofs] != M1) || (space.mem[ofs + 1] != M2))
-            throw new RuntimeException("no magic word: ofs=" + ofs + " bytes=" + space.mem[ofs] + "," + space.mem[ofs + 1]);
+        if ((space.getByte(ofs) != M1) || (space.getByte(ofs + 1) != M2))
+            throw new RuntimeException("no magic word: ofs=" + ofs + " bytes=" + space.getByte(ofs) + "," + space.getByte(ofs + 1));
 
     }
 
@@ -425,7 +482,7 @@ public class ByteArrayHeapBase {
     }
 
     public void checkDebugFooter(Space space, int ofs) {
-        if (ofs > space.mem.length - debugHeaderSize) return;
+        if (ofs > space.spaceSize() - debugHeaderSize) return;
         checkDeugMagicWord(space, ofs);
     }
 
@@ -443,7 +500,7 @@ public class ByteArrayHeapBase {
 
     public int getMemSize() {
 
-        return getCurSpace().mem.length;
+        return getCurSpace().spaceSize();
 
     }
 
@@ -528,6 +585,28 @@ public class ByteArrayHeapBase {
         chooseCurrentSpace();
     }
 
+    public String getSpaceFileName(String abaseFileName,int n) {
+        return abaseFileName+ "." + n + ".space";
+    }
+
+    public String getSpaceFileName(int n) {
+        return getSpaceFileName(baseFileName,n);
+    }
+
+    public void createSpace(int spNum)  {
+        if (memoryMapped) {
+            try {
+                ((MemoryMappedSpace) spaces[spNum]).createMemoryMapped(spaceSize,getSpaceFileName(spNum));
+            } catch (IOException e) {
+                // wrap now to avoid propagating the IOException
+                // In production code, it should propagate it.
+                throw new RuntimeException(e.getMessage());
+            }
+        }
+        else
+         spaces[spNum].create(spaceSize);
+    }
+
     public void chooseCurrentSpace() {
         curSpaceNum = headOfPartiallyFilledSpaces.removeFirst();
         Space space = getCurSpace();
@@ -535,7 +614,7 @@ public class ByteArrayHeapBase {
         if (logOperations)
             System.out.println(">> Switching curspace to " + curSpaceNum);
         if (space.empty())
-            space.create(spaceSize);
+            createSpace(curSpaceNum);
         else {
             if (logOperations)
                 System.out.println(">> This is a partially filled space");
@@ -558,9 +637,6 @@ public class ByteArrayHeapBase {
         return res;
     }
 
-
-
-    static int lastMetadataLen = -1;
 
     public int storeObject(Space destSpace, int destOldMemTop,
                            byte[] encoded,
@@ -588,14 +664,14 @@ public class ByteArrayHeapBase {
         if (metadata!=null) {
             if (metadataOffset + metadataLength > metadata.length)
                 throw new RuntimeException("bad pointers");
-            System.arraycopy(metadata, metadataOffset, destSpace.mem, newMemTop, metadataLength);
+            destSpace.setBytes(newMemTop,metadata,metadataOffset,metadataLength);
             newMemTop += metadataLength;
         }
 
-        destSpace.mem[newMemTop] = (byte) encodedLength; // max 127 byte
+        destSpace.putByte(newMemTop,(byte) encodedLength); // max 127 byte
         newMemTop += F1;
 
-        System.arraycopy(encoded, encodedOffset, destSpace.mem, newMemTop, encodedLength);
+        destSpace.setBytes(newMemTop,encoded,encodedOffset,encodedLength);
         newMemTop += len;
         writeDebugFooter(destSpace, newMemTop);
         newMemTop += debugHeaderSize;
@@ -621,10 +697,9 @@ public class ByteArrayHeapBase {
         int internalOfs = getSpaceOfsFromPointer(ptrSpaceNum, encodedOfs);
         checkDebugHeader(space, internalOfs);
         int dataOfs = internalOfs+lastMetadataLen;
-        byte[] d = new byte[space.mem[dataOfs]];
+        byte[] d = new byte[space.getByte(dataOfs)];
         checkDebugFooter(space, internalOfs + lastMetadataLen + F1 +  d.length);
-
-        System.arraycopy(space.mem, dataOfs + F1, d, 0, d.length);
+        space.getBytes(dataOfs + F1, d, 0, d.length);
         return d;
     }
 
@@ -637,7 +712,7 @@ public class ByteArrayHeapBase {
         int internalOfs = getSpaceOfsFromPointer(ptrSpaceNum, encodedOfs);
         checkDebugHeader(space, internalOfs);
         byte[] d = new byte[lastMetadataLen];
-        System.arraycopy(space.mem, internalOfs, d, 0, d.length);
+        space.getBytes( internalOfs, d, 0, d.length);
         return d;
     }
 
@@ -649,8 +724,8 @@ public class ByteArrayHeapBase {
         space = spaces[ptrSpaceNum];
         int internalOfs = getSpaceOfsFromPointer(ptrSpaceNum, encodedOfs);
         checkDebugHeader(space, internalOfs);
-        System.arraycopy(metadata,0,space.mem, internalOfs, lastMetadataLen);
-    }
+        space.setBytes(internalOfs,metadata,0,lastMetadataLen);
+     }
 
     public void checkObject(long encodedOfs) {
         Space space;
@@ -662,7 +737,7 @@ public class ByteArrayHeapBase {
         checkDebugHeader(space, internalOfs);
         validMetadataLength();
         // Get the max size window
-        int len = space.mem[internalOfs+lastMetadataLen];
+        int len = space.getByte(internalOfs+lastMetadataLen);
         if ((len > 127) || (len < 0))
             throw new RuntimeException("invalid length");
 
@@ -693,7 +768,7 @@ public class ByteArrayHeapBase {
         total += getSize(headOfPartiallyFilledSpaces);
 
         if (curSpaceNum != -1) {
-            total += spaces[curSpaceNum].mem.length;
+            total += spaces[curSpaceNum].spaceSize();
         }
         return total;
     }
@@ -724,8 +799,8 @@ public class ByteArrayHeapBase {
         if (!queue.empty()) {
             int head = queue.peekFirst();
             while (head != -1) {
-                if (spaces[head].mem != null)
-                    total += spaces[head].mem.length;
+                if (spaces[head].created())
+                    total += spaces[head].spaceSize();
                 else
                     total += spaceSize; // it will be created later
                 head = spaces[head].previousSpaceNum;
@@ -747,7 +822,7 @@ public class ByteArrayHeapBase {
         // While remapping the current space is unusable
         if (curSpaceNum != -1) {
             used += spaces[curSpaceNum].memTop;
-            total += spaces[curSpaceNum].mem.length;
+            total += spaces[curSpaceNum].spaceSize();
         }
 
         if (total == 0)

@@ -46,7 +46,7 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
     public DataSourceWithCacheAndStats( KeyValueDataSource base, int cacheSize,
                                 CacheSnapshotHandler cacheSnapshotHandler) {
         this.cacheSize = cacheSize;
-        this.base = Objects.requireNonNull(base);
+        this.base = base;
         this.uncommittedCache = new LinkedHashMap<>(cacheSize / 8, (float)0.75, false);
         Map<ByteArrayWrapper, byte[]> iCache = makeCommittedCache(cacheSize, cacheSnapshotHandler);
         if (iCache!=null)
@@ -86,34 +86,36 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
                 return uncommittedCache.get(wrappedKey);
             }
 
+            if (base!=null) {
+                value = base.get(key);
+                if (dump) {
+                    if (value != null)
+                        System.out.println("Reading base key: " + wrappedKey.toString().substring(0, 8) +
+                                " value " +
+                                ByteUtil.toHexString(value).substring(0, 8) + ".. length " + value.length);
+                    else
+                        System.out.println("Reading base key: " + wrappedKey.toString().substring(0, 8) +
+                                " failed");
+                }
+                getsFromStore++;
+                if (traceEnabled) {
+                    numOfGetsFromStore.incrementAndGet();
+                }
 
-            value = base.get(key);
-            if (dump) {
-                if (value!=null)
-                System.out.println("Reading base key: "+wrappedKey.toString().substring(0,8)+
-                        " value "+
-                        ByteUtil.toHexString(value).substring(0,8)+".. length "+value.length);
-                else
-                    System.out.println("Reading base key: "+wrappedKey.toString().substring(0,8)+
-                            " failed");
-            }
-            getsFromStore++;
-            if (traceEnabled) {
-                numOfGetsFromStore.incrementAndGet();
-            }
-
-            //null value, as expected, is allowed here to be stored in committedCache
-            // Why would a null value be needed here?
-            // Only if an element is read from the database but it's missing
-            // but how can it be missing if the key is a hash of the node ??
-            // The ONLY case is that save() is testing if the node exists, to avoid
-            // storing it. If it doesn't exists, it will immediately store it
-            // therefore, there is absolutely no need to store null.
-            //null value, as expected, is allowed here to be stored in committedCache
-            //null value indicates the removal of the element.
-            if (value!=null)
-                if (committedCache!=null)
-                    committedCache.put(wrappedKey, value);
+                //null value, as expected, is allowed here to be stored in committedCache
+                // Why would a null value be needed here?
+                // Only if an element is read from the database but it's missing
+                // but how can it be missing if the key is a hash of the node ??
+                // The ONLY case is that save() is testing if the node exists, to avoid
+                // storing it. If it doesn't exists, it will immediately store it
+                // therefore, there is absolutely no need to store null.
+                //null value, as expected, is allowed here to be stored in committedCache
+                //null value indicates the removal of the element.
+                if (value != null)
+                    if (committedCache != null)
+                        committedCache.put(wrappedKey, value);
+            } else
+                value= null;
         }
         finally {
             if (traceEnabled) {
@@ -303,7 +305,8 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
             Set<ByteArrayWrapper> uncommittedKeysToRemove = uncommittedCache.entrySet().stream().filter(e -> e.getValue() == null).map(Map.Entry::getKey).collect(Collectors.toSet());
             if ((uncommittedBatch.size()>0) || (uncommittedKeysToRemove.size()>0))
                 checkReadOnly();
-            base.updateBatch(uncommittedBatch, uncommittedKeysToRemove);
+            if (base!=null)
+                base.updateBatch(uncommittedBatch, uncommittedKeysToRemove);
             if (committedCache!=null) {
                 committedCache.putAll(uncommittedCache);
             }
@@ -325,14 +328,21 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
     }
 
     public String getName() {
-        return base.getName() + "-with-uncommittedCache";
+        if (base==null)
+            return "DataSourceWithCacheInMemory";
+        else
+            return base.getName() + "-with-uncommittedCache";
     }
 
     public void init() {
+        if (base==null)
+            return;
         base.init();
     }
 
     public boolean isAlive() {
+        if (base==null)
+            return true;
         return base.isAlive();
     }
 
@@ -341,7 +351,8 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
 
         try {
             flush();
-            base.close();
+            if (base!=null)
+                base.close();
             if (cacheSnapshotHandler != null) {
                 cacheSnapshotHandler.save(committedCache);
             }
@@ -378,7 +389,13 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
                                                                      CacheSnapshotHandler cacheSnapshotHandler) {
         if (cacheSize==0) return null;
 
-        Map<ByteArrayWrapper, byte[]> cache = new MaxSizeHashMap<>(cacheSize, true);
+        Map<ByteArrayWrapper, byte[]> cache;
+
+        if (cacheSize==Integer.MAX_VALUE) {
+            cache = new HashMap<>();
+        } else
+            cache = new MaxSizeHashMap<>(cacheSize, true);
+
 
         if (cacheSnapshotHandler != null) {
             cacheSnapshotHandler.load(cache);
@@ -420,7 +437,7 @@ public class DataSourceWithCacheAndStats implements KeyValueDataSource {
 
             list.add("committedCacheHits: " + committedCacheHits);
             list.add("committedCacheMisses: " + committedCacheMisses);
-            list.add("committedCache.size(): " + committedCache.size());
+            list.add("committedCache.size(): " + committedCache.size()+" (max "+cacheSize+")");
         }
         list.add("uncommittedCache.size(): "+uncommittedCache.size());
         return list;

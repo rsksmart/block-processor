@@ -1,6 +1,7 @@
-package co.rsk.tools.processor.TrieTests.Unitrie;
+package co.rsk.tools.processor.TrieTests.Unitrie.ENC;
 
 import co.rsk.crypto.Keccak256;
+import co.rsk.tools.processor.TrieTests.Unitrie.*;
 import co.rsk.tools.processor.TrieTests.ohmap.HashEOR;
 
 import java.util.Optional;
@@ -9,8 +10,8 @@ public class NodeReferenceWithENC extends NodeReferenceWithLazyNode {
 
     private EncodedObjectRef encodedRef;
 
-    public NodeReferenceWithENC(TrieStore store,  Trie node, Keccak256 hash,
-                             EncodedObjectRef aEndodedOfs) {
+    public NodeReferenceWithENC(TrieStore store, Trie node, Keccak256 hash,
+                                EncodedObjectRef aEndodedOfs) {
         super(store,  node, hash);
 
         this.encodedRef = aEndodedOfs;
@@ -78,7 +79,7 @@ public class NodeReferenceWithENC extends NodeReferenceWithLazyNode {
                         (lazyHash !=null))) {
             if (persistent) {
                 lazyNode = getDynamicLazyNode();
-                this.loadedFromStore = lazyNode.wasSaved();
+                this.presentInTrieStore = lazyNode.wasSaved();
                 return Optional.of(lazyNode);
             } else
                 return Optional.of(getDynamicLazyNode());

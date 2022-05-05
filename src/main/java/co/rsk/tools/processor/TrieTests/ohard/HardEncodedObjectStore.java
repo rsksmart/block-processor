@@ -1,7 +1,7 @@
 package co.rsk.tools.processor.TrieTests.ohard;
 
 import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.ENC.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ObjectReference;
 
 

@@ -1,11 +1,9 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectStore;
-import co.rsk.tools.processor.TrieTests.Unitrie.GlobalEncodedObjectStore;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.List;
 
 public class Benchmark {
     public long startMbs;
@@ -22,6 +20,25 @@ public class Benchmark {
     FileWriter myWriter;
     boolean showPartialMemConsumed = true;
 
+    public String getExactCountLiteral(long i) {
+        if (i==1_000)
+            return "1k";
+        if (i==10_000)
+            return "10k";
+        if (i==100_000)
+            return "100k";
+        if (i==1_000_000)
+            return "1M";
+        if (i==10_000_000)
+            return "10M";
+        if (i==100_000_000)
+            return "100M";
+        if (i==1_000_000_000L)
+            return "1B";
+        if (i==10_000_000_000L)
+            return "10B";
+        return ""+i;
+    }
     public String getMillions(long i) {
         String maxStr = ""+ (i/1000/1000)+"M";
         return maxStr;
@@ -77,6 +94,13 @@ public class Benchmark {
     public void printMemStats(String s) {
 
     }
+
+    public void logList(String s, List<String> stats) {
+        for(int i=0;i<stats.size();i++) {
+            log(s + stats.get(i));
+        }
+    }
+
     public void dumpProgress(long i,long amax) {
         log("item " + i + " (" + (i * 100 / amax) + "%)");
         printMemStats("--");

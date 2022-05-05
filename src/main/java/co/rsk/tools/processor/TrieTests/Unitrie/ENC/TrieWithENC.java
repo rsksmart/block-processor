@@ -1,18 +1,34 @@
-package co.rsk.tools.processor.TrieTests.Unitrie;
+package co.rsk.tools.processor.TrieTests.Unitrie.ENC;
 
 import co.rsk.core.types.ints.Uint24;
 import co.rsk.crypto.Keccak256;
+import co.rsk.tools.processor.TrieTests.Unitrie.*;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
 
 public class TrieWithENC extends TrieImpl {
+    static boolean tryToCompress = true;
+
     EncodedObjectRef encodedRef;
+
+    // default constructor, no secure
+    public TrieWithENC() {
+        super();
+    }
+
+    public TrieWithENC(TrieStore store) {
+        super(store);
+    }
+
+    protected TrieWithENC(TrieStore store, TrieKeySlice sharedPath, byte[] value) {
+        super(store, sharedPath, value);
+    }
 
     // full constructor
     protected TrieWithENC(TrieStore store, TrieKeySlice sharedPath, byte[] value,
-                     NodeReference left, NodeReference right,
-                     Uint24 valueLength, Keccak256 valueHash,
-                     VarInt childrenSize,
-                      boolean isEmbedded,EncodedObjectRef aEncodedOfs) {
+                          NodeReference left, NodeReference right,
+                          Uint24 valueLength, Keccak256 valueHash,
+                          VarInt childrenSize,
+                          boolean isEmbedded, EncodedObjectRef aEncodedOfs) {
         super(store, sharedPath, value,
         left,  right, valueLength, valueHash,  childrenSize,   isEmbedded);
         this.encodedRef = aEncodedOfs;
@@ -126,4 +142,18 @@ public class TrieWithENC extends TrieImpl {
         return encodedRef;
     }
 
+    public Trie cloneNode(TrieKeySlice newSharedPath) {
+        return new TrieWithENC(this.store, newSharedPath, this.value, this.left,
+                this.right, this.valueLength,
+                this.valueHash, this.childrenSize,
+                TrieImpl.isEmbeddable(newSharedPath, this.left,  this.right, this.valueLength),
+                null);
+    }
+
+    public Trie cloneNode(NodeReference newLeft, NodeReference newRight,VarInt newChildrenSize) {
+        return new TrieWithENC(this.store, this.sharedPath, this.value,
+                newLeft, newRight, this.valueLength, this.valueHash, newChildrenSize,
+                TrieImpl.isEmbeddable(this.sharedPath, newLeft,  newRight, this.valueLength),
+                null);
+    }
 }

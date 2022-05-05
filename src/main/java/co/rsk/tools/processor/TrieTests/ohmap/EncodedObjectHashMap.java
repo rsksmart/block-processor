@@ -2,7 +2,7 @@ package co.rsk.tools.processor.TrieTests.ohmap;
 
 import co.rsk.crypto.Keccak256;
 import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectRef;
-import co.rsk.tools.processor.TrieTests.Unitrie.EncodedObjectStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.ENC.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ObjectReference;
 import org.ethereum.db.ByteArrayWrapper;
 

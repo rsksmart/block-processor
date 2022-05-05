@@ -3,8 +3,18 @@ import co.rsk.tools.processor.TrieTests.oheap.Space;
 import net.mintern.primitive.Primitive;
 import net.mintern.primitive.comparators.IntComparator;
 import org.ethereum.util.ByteUtil;
+
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
+// This class represents a heap on memory or memory-mapped files where elements
+// are referenced by handles, instead of their physical position in memory/file.
+// The use of indirection allows the compression of the files without propagating
+// the changes to the objects that hold the pointers to the hash elements.
 
 public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteArrayRefHeap {
     // The number of maxObjects must be at least 5 times higher than the number of
@@ -23,13 +33,13 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
     int highestHandle;
     int maxReferences;
 
-    static ByteArrayRefHeap objectHeap;
 
-    public BitSet touchedHandles;
 
     int referenceCount;
     private HandleComparator handleComparator;
 
+    // These are only required for remapping
+    public BitSet touchedHandles;
     int[] move; // List of handles
     int moveCount;
 
@@ -48,14 +58,6 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
 
         maxReferences = default_maxObjects;
         // Must call initialize
-    }
-
-
-    public static ByteArrayRefHeap get() {
-        if (objectHeap == null)
-            objectHeap = new ByteArrayRefHeap();
-
-        return objectHeap;
     }
 
 
@@ -199,14 +201,16 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
                 h =2;
             references[h] = buildPointer(hspace, baseOfs); // stores new reference
 
-            int dataLen = space.mem[spaceOfs+lastMetadataLen];
+            int dataLen = space.getByte(spaceOfs+lastMetadataLen);
             // Now check that either both have indexes or none
 
+            byte[] prevObject = new byte[lastMetadataLen+F1+dataLen];
+            space.getBytes(spaceOfs,prevObject,spaceOfs,prevObject.length);
             // StoreObject receives the offset of the object data, not
             // the object header, therefore we must add F3 to spaceOfs.
             int newTop = storeObject(space, baseOfs,
-                    space.mem, spaceOfs +lastMetadataLen + F1, dataLen,
-                    space.mem,spaceOfs,lastMetadataLen);
+                    prevObject, lastMetadataLen + F1, dataLen,
+                    prevObject,0,lastMetadataLen);
 
             if (h == debugHandle) {
                 dumpHandleContent(h);
@@ -270,7 +274,7 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
                 int iofs = getSpaceOfsFromPointer(s, ofs);
                 r += "internalOfs: " + iofs + "\n";
                 r += "metadataLen: " + lastMetadataLen + "\n";
-                r += "dataLen: " + spaces[s].mem[iofs+lastMetadataLen] + "\n";
+                r += "dataLen: " + spaces[s].getByte(iofs+lastMetadataLen) + "\n";
                 byte[] mbytes = retrieveMetadataByOfs(ofs);
                 r += "metadata: " + ByteUtil.toHexString(mbytes) + "\n";
                 byte[] bytes = retrieveDataByOfs(ofs);
@@ -421,6 +425,108 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
         return retrieveMetadataByOfs(references[handle]);
     }
 
+    public boolean fileExists() {
+        Path path = Paths.get(baseFileName + ".desc");
+        File f = path.toFile();
+        return (f.exists() && !f.isDirectory());
+    }
 
+    public long load() throws IOException {
+        long r = super.load();
+        readFromFile(baseFileName+".ref",false);
+        return r;
+    }
+
+    public void save(long rootOfs) throws IOException {
+        super.save(rootOfs);
+        saveToFile(baseFileName+".ref");
+    }
+
+    protected void readFromFile(String fileName,boolean map) throws IOException {
+        File file = new File(fileName);
+        FileInputStream fin = new FileInputStream(file);
+        BufferedInputStream bin = new BufferedInputStream(fin);
+        DataInputStream din = new DataInputStream(bin);
+
+        unusedHandlesCount = din.readInt();
+        highestHandle = din.readInt();
+        maxReferences = din.readInt();
+        int references_length = din.readInt();
+        int unusedHandles_length = din.readInt();
+        references = null; // Avoid out-of-memory errors
+        unusedHandles = null; // Avoid out-of-memory errors
+        references = readLongArray(din, references_length);
+        unusedHandles = readIntArray(din, unusedHandles_length);
+        din.close();
+        super.load();
+
+    }
+
+    int[] readIntArray(DataInputStream din,int count) throws IOException {
+        int[] table = new int[count];
+        System.out.println("reading int array...");
+        for (int i = 0; i < count; i++) {
+            table[i] = din.readInt();
+        }
+        System.out.println("done");
+        return table;
+    }
+
+    long[] readLongArray(DataInputStream din,int count) throws IOException {
+        long[] table = new long[count];
+        System.out.println("reading long array...");
+        for (int i = 0; i < count; i++) {
+            table[i] = din.readLong();
+        }
+        System.out.println("done");
+        return table;
+    }
+
+    protected void saveToFile(String fileName ) throws IOException {
+
+        RandomAccessFile sc
+                = new RandomAccessFile(fileName, "rw");
+        FileChannel file = sc.getChannel();
+        ByteBuffer buf = file.map(FileChannel.MapMode.READ_WRITE, 0,
+                4L * 5);
+
+        buf.putInt(unusedHandlesCount);
+        buf.putInt(highestHandle);
+        buf.putInt(maxReferences);
+        buf.putInt(references.length);
+        buf.putInt(unusedHandles.length);
+
+        FileMapUtil.mapAndCopyLongArray(file,4*5,8L*references.length,references);
+        FileMapUtil.mapAndCopyIntArray(file,4*5+8L*references.length,
+                4L*unusedHandles.length,unusedHandles);
+
+        file.close();
+        /* Slower
+        DataOutputStream os = new DataOutputStream(
+                new FileOutputStream(fileName));
+
+        os.writeInt(unusedHandlesCount);
+        os.writeInt(highestHandle);
+        os.writeInt(maxReferences);
+        os.writeInt(references.length);
+        os.writeInt(unusedHandles.length);
+        writeLongArray(os,references);
+        writeIntArray(os,unusedHandles);
+        os.close();
+
+         */
+    }
+
+    void writeIntArray(DataOutputStream os,int[] table) throws IOException {
+        for (int i =0 ; i < table.length; ++i){
+            os.writeInt(table[i]);
+        }
+    }
+
+    void writeLongArray(DataOutputStream os,long[] table) throws IOException {
+        for (int i =0 ; i < table.length; ++i){
+            os.writeLong(table[i]);
+        }
+    }
 }
 

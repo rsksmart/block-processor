@@ -2,6 +2,8 @@ package co.rsk.tools.processor.TrieTests.Unitrie;
 
 
 
+import co.rsk.tools.processor.TrieTests.Unitrie.DNC.DecodedNodeCache;
+
 import java.util.Optional;
 
 public interface TrieStore {
@@ -19,6 +21,11 @@ public interface TrieStore {
 
     DecodedNodeCache getDecodedNodeCache();
 
+    // This method should only be used with trie roots.
+    void saveRoot(Trie trie);
+
+    // If it's necessary to save other parts of the trie, then a different
+    // method must be added.
     void save(Trie trie);
 
     void flush();
@@ -29,6 +36,8 @@ public interface TrieStore {
      */
     Optional<Trie> retrieve(byte[] hash);
 
+    // Optimized for root retrieval
+    Optional<Trie> retrieveRoot(byte[] hash);
 
     //Optional<ByteBuffer> retrieve(byte[] hash);
 

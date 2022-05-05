@@ -12,6 +12,8 @@ public interface TrieFactory {
     public Trie newTrie(TrieStore store) ;
 
     public Trie newTrie(TrieStore store, TrieKeySlice sharedPath, byte[] value) ;
+
+    /*deprecated
     public Trie newTrie(TrieStore store, TrieKeySlice sharedPath, byte[] value, NodeReference left, NodeReference right,
                         Uint24 valueLength, Keccak256 valueHash) ;
 
@@ -19,7 +21,7 @@ public interface TrieFactory {
                      NodeReference left, NodeReference right,
                      Uint24 valueLength, Keccak256 valueHash,
                      VarInt childrenSize) ;
-
+   */
     public Trie newTrie(TrieStore store, TrieKeySlice sharedPath, byte[] value,
                         NodeReference left, NodeReference right,
                         Uint24 valueLength, Keccak256 valueHash,
