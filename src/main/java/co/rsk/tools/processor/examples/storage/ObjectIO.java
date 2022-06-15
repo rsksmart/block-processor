@@ -209,6 +209,14 @@ public class ObjectIO {
         return v;
     }
 
+    static public long readLong5(InputStream in) throws IOException {
+        byte[] buf = new byte[5];
+        if (in.read(buf, 0, 5)<5)
+            throw new EOFException();
+        long v = getLong5(buf, 0);
+        return v;
+    }
+
     static public double readDouble(InputStream in) throws IOException {
         byte[] buf = new byte[8];
         if (in.read(buf, 0, 8)<8)

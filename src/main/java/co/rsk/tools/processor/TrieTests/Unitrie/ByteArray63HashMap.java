@@ -16,6 +16,7 @@ public class ByteArray63HashMap  extends AbstractByteArrayHashMap {
          sharedBaHeap,
          maxElements);
     }
+
     protected Table createTable(int cap)
     {
         LongTable table;

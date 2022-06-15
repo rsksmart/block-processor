@@ -19,7 +19,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
     static final int MAXIMUM_CAPACITY = 1073741824;
     static final float DEFAULT_LOAD_FACTOR = 0.5F;
     static final long defaultNewBeHeapCapacity = 750_000_000;
-    static final long empty = Long.MIN_VALUE;
+
     static final boolean debugCheckHeap = false;
     static final String debugKey = null;
     
@@ -173,12 +173,13 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
 
     //////////////////////////////////////////////////////////////////////////
     // Management of marked handle methods:
-    // The bit used is bit 38.
-    // All negatives are invalid (except empty constant which is minimum long 0x7fffffff...)
-    // Therefore only 38 bits are available for offsets (256 billion bytes).
-
-    final static long nullHandleBitMask = 0x4000000000L;
+    // The bit used is bit 39.
+    // All negatives are invalid.
+    // Therefore only 39 bits are available for offsets (512 giga bytes).
+    // 0x40 00 00 00 00
+    final static long nullHandleBitMask = 0x8000000000L;
     final static long nullHandleMask = nullHandleBitMask -1;
+    final static long empty = 0x7fffffffffL;
 
     public long unmarkMarkedOffset(long markedOffset) {
         return (markedOffset & nullHandleMask);
@@ -751,6 +752,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
                     this.threshold = cap < 1073741824 && ft < 1.07374182E9F ? (int)ft : 2147483647;
                     //????? TO DO: SharedSecrets.getJavaObjectInputStreamAccess().checkArray(s, Entry[].class, cap);
                     table = createTable(cap);
+                    table.fill(empty );
                     for(int i = 0; i < mappings; ++i) {
                         ByteArrayWrapper key = (ByteArrayWrapper) s.readObject();
                         byte[] value = (byte[]) s.readObject();
@@ -1084,11 +1086,10 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
         size = din.readInt();
         threshold = din.readInt();
         table =createTable(count);
+        table.fill(empty);
         System.out.println("reading hash table");
-        for (int i = 0; i < count; i++) {
-            // TO DO: compress here
-            table.setPos(i,din.readInt());
-        }
+        table.readFrom(din,count);
+
         System.out.println("done");
         din.close();
 

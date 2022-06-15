@@ -92,7 +92,7 @@ public class CompareTries extends Benchmark  {
 
     //////////////////////////////////////
     // These affect the write test AND the read test (to choose the file):
-    long addMaxKeysBottomUp  = 1L * (1 << 20); // 8M keys
+    long addMaxKeysBottomUp  = 1L * (1 << 26); // 8M keys
     long addMaxKeysTopDown = 0;//1L * (1 << 20);//1L * (1 << 20)/2; // total: 1.5M
 
 

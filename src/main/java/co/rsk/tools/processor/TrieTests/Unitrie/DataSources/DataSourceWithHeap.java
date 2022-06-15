@@ -1,6 +1,7 @@
 package co.rsk.tools.processor.TrieTests.Unitrie.DataSources;
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
+import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray39HashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray63HashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.ByteArrayHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.AbstractByteArrayHashMap;
@@ -86,7 +87,7 @@ public class DataSourceWithHeap extends DataSourceWithAuxKV {
                 createByteArrayHeap(loadFActor,maxNodeCount,beHeapCapacity);
 
 
-        this.bamap =  new ByteArray63HashMap(initialSize,loadFActor,myKR,
+        this.bamap =  new ByteArray39HashMap(initialSize,loadFActor,myKR,
                 (long) beHeapCapacity,
                 sharedBaHeap,0);
 

@@ -45,4 +45,24 @@ public class FileMapUtil {
             longCount +=len;
         }
     }
+
+    static public void mapAndCopyByteArray(FileChannel file, long offset, long size, byte[] table) throws IOException {
+        int count=0;
+        int longCount=0;
+        int longLeft = table.length;
+        while (longLeft>0) {
+            int len = Math.min(longLeft,(1<<23)); // 8M longs = 64 Mbytes Max
+            ByteBuffer buf = file.map(FileChannel.MapMode.READ_WRITE, offset,
+                    len );
+            for (int i=longCount;i<(longCount+len);i++) {
+                buf.put(table[i]);
+                count++;
+                if (count % 1_000_000 == 0)
+                    System.out.println("" + (count * 100L / table.length) + "%");
+            }
+            offset +=len;
+            longLeft -=len;
+            longCount +=len;
+        }
+    }
 }

@@ -1,26 +1,28 @@
 package co.rsk.tools.processor.TrieTests.Unitrie;
 
+import co.rsk.tools.processor.examples.storage.ObjectIO;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
 
-public class LongTable implements Table {
+public class UInt40Table implements Table {
 
-    long table[];
+    byte table[];
 
-    public LongTable(int cap) {
-        table = new long[cap];
+    public UInt40Table(int cap) {
+        table = new byte[cap*5];
     }
 
     @Override
     public long getPos(int i) {
-        return table[i];
+        return ObjectIO.getLong5(table,i*5);
     }
 
     @Override
     public void setPos(int i, long value) {
-        table[i] = value;
+        ObjectIO.putLong5(table,i*5,value);
     }
 
     @Override
@@ -33,27 +35,28 @@ public class LongTable implements Table {
         if (isNull())
             return 0;
         else
-            return table.length;
+            return table.length/5;
     }
 
     @Override
     public void copyTo(FileChannel file, int ofs) throws IOException {
         // Child to -do
-          FileMapUtil.mapAndCopyLongArray(file,ofs,table.length,table);
+        FileMapUtil.mapAndCopyByteArray(file,ofs,table.length,table);
     }
 
     @Override
     public
     void fill(long value) {
-        Arrays.fill( table, value );
+        for(int i=0;i<table.length/5;i++){
+            setPos(i,value);
+        }
     }
 
     @Override
     public
-    void readFrom(DataInputStream din, int count) throws IOException {
+    void readFrom(DataInputStream din, int count) throws IOException  {
         for (int i = 0; i < count; i++) {
-            // TO DO: compress here
-            setPos(i, din.readLong());
+           setPos(i, ObjectIO.readLong5(din));
         }
     }
 }

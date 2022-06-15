@@ -1,13 +1,13 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.store.ByteArrayRefHashMap;
-import co.rsk.tools.processor.TrieTests.Unitrie.store.CAHashMap;
-import co.rsk.tools.processor.TrieTests.Unitrie.store.PrioritizedByteArrayHashMap;
-import co.rsk.tools.processor.TrieTests.Unitrie.store.TrieCACacheRelation;
+import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray39HashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray63HashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
 import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
 import org.ethereum.util.FastByteComparisons;
 
+import java.io.IOException;
 import java.util.List;
 
 public class UnitrieUnitTests {
@@ -172,7 +172,7 @@ public class UnitrieUnitTests {
 
     }
 
-    public void testByteArrayHashMap() {
+    public void testByteArrayRefHashMap() {
         MyBAKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
         // First, create  a map without maximums
         ByteArrayRefHashMap ba = new ByteArrayRefHashMap(100,0.3f,myBAKeyValueRelation,
@@ -181,7 +181,7 @@ public class UnitrieUnitTests {
         ByteArrayWrapper[] k = new ByteArrayWrapper[max];
         byte[][] v = new byte[max][];
         for(int i=0;i<max;i++) {
-            v[i] = getByteArrayFromInt(1);
+            v[i] = getByteArrayFromInt(i);
             k[i] = myBAKeyValueRelation.getKeyFromData(v[i]);
         }
 
@@ -208,6 +208,92 @@ public class UnitrieUnitTests {
         ba.remove(k[2]);
         checkEqual(ba.containsKey(k[2]),false);
         checkEqual(ba.get(k[2]),null);
+
+
+    }
+
+    class KeyValues {
+        public MyBAKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
+        public int max = 10;
+        public ByteArrayWrapper[] k = new ByteArrayWrapper[max];
+        public byte[][] v = new byte[max][];
+
+        void create() {
+            for(int i=0;i<max;i++) {
+                v[i] = getByteArrayFromInt(i);
+                k[i] = myBAKeyValueRelation.getKeyFromData(v[i]);
+            }
+        }
+    }
+
+    public void testByteArrayHashMap() {
+        KeyValues kvs = new KeyValues();
+        kvs.create();
+
+        // First, create  a map without maximums
+        AbstractByteArrayHashMap ba1 = new ByteArray39HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
+                100 * 100, null, 0);
+        testByteArrayHashMap(kvs,ba1,"test1");
+
+        AbstractByteArrayHashMap ba2 = new ByteArray63HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
+                100 * 100, null, 0);
+        testByteArrayHashMap(kvs,ba2,"test2");
+
+    }
+    public void testByteArrayHashMap(
+                KeyValues kvs,AbstractByteArrayHashMap ba,String testName ) {
+
+
+        putKvs(kvs, ba);
+        checkKvs(kvs, ba);
+        try {
+            ba.saveToFile(testName);
+            ba.readFromFile(testName, true); // now read, mapped
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        checkKvs(kvs, ba);
+
+    }
+
+    void  putKvs(KeyValues kvs , AbstractByteArrayHashMap ba) {
+        ba.put(kvs.v[1]);
+        ba.put(kvs.v[2]);
+    }
+    void checkKvs(KeyValues kvs , AbstractByteArrayHashMap ba) {
+        checkEqual(ba.containsKey(kvs.k[1]),true);
+        checkEqual(ba.get(kvs.k[1]),kvs.v[1]);
+
+        checkEqual(ba.containsKey(kvs.k[2]),true);
+        checkEqual(ba.get(kvs.k[2]),kvs.v[2]);
+    }
+
+    void putAndCheckKvs(KeyValues kvs , AbstractByteArrayHashMap ba) {
+        ba.put(kvs.v[1]);
+        checkEqual(ba.containsKey(kvs.k[1]),true);
+        checkEqual(ba.get(kvs.k[1]),kvs.v[1]);
+
+        ba.put(kvs.k[2],null); // put a key with null
+        checkEqual(ba.containsKey(kvs.k[2]),true);
+        checkEqual(ba.get(kvs.k[1]),null);
+
+        // Add a second null, it should do nothing
+        ba.put(kvs.k[2],null); // put a key with null
+        checkEqual(ba.containsKey(kvs.k[2]),true);
+        checkEqual(ba.get(kvs.k[1]),null);
+
+
+        // Now store a real value, removing the previous null
+        ba.put(kvs.k[2],kvs.v[2]);
+        checkEqual(ba.containsKey(kvs.k[2]),true);
+        checkEqual(ba.get(kvs.k[2]),kvs.v[2]);
+
+        // Now remove it completely
+        ba.remove(kvs.k[2]);
+        checkEqual(ba.containsKey(kvs.k[2]),false);
+        checkEqual(ba.get(kvs.k[2]),null);
+
+
 
 
     }
