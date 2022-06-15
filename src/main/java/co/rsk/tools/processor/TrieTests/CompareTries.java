@@ -306,7 +306,7 @@ public class CompareTries extends Benchmark  {
             int maxNodeCount = (int) totalKeys*2;//32*1000*1000; // 32 Million nodes -> 128 Mbytes of reference cache
             long beHeapCapacity =64L*1000*1000*1000; // 64 GB
             try {
-                dsDB = new DataSourceWithHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString());
+                dsDB = new FlatDB(maxNodeCount,beHeapCapacity,trieStorePath.toString());
             } catch (IOException e) {
                 e.printStackTrace();
                 System.exit(1);

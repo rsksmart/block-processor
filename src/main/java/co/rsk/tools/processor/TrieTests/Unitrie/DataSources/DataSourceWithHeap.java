@@ -2,10 +2,8 @@ package co.rsk.tools.processor.TrieTests.Unitrie.DataSources;
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
 import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray39HashMap;
-import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray63HashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.ByteArrayHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.AbstractByteArrayHashMap;
-import co.rsk.tools.processor.TrieTests.Unitrie.store.ByteArrayRefHashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.TrieCACacheRelation;
 import org.ethereum.db.ByteArrayWrapper;
 
@@ -22,6 +20,9 @@ public class DataSourceWithHeap extends DataSourceWithAuxKV {
 
     Path mapPath;
     Path dbPath;
+
+
+
 
     public DataSourceWithHeap(int maxNodeCount, long beHeapCapacity, String databaseName) throws IOException {
         super(databaseName);
@@ -44,15 +45,20 @@ public class DataSourceWithHeap extends DataSourceWithAuxKV {
 
 
     public void close() {
-        flush();
+        dbLock.writeLock().lock();
         try {
-            bamap.saveToFile(mapPath.toString());
-            sharedBaHeap.save(0);
-        } catch (IOException e) {
-            e.printStackTrace();
+            flush();
+            try {
+                bamap.saveToFile(mapPath.toString());
+                sharedBaHeap.save(0);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            committedCache.clear();
+            dsKV.close();
+        } finally {
+            dbLock.writeLock().unlock();
         }
-        committedCache.clear();
-        dsKV.close();
     }
 
     ByteArrayHeap createByteArrayHeap(float loadFactor, long maxNodeCount, long maxCapacity) throws IOException {

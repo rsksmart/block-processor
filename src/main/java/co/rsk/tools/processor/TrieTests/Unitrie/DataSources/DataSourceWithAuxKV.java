@@ -11,13 +11,16 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class DataSourceWithAuxKV implements KeyValueDataSource {
 
-    private static final Logger logger = LoggerFactory.getLogger("datasourcewithauxkv");
+    protected static final Logger logger = LoggerFactory.getLogger("datasourcewithauxkv");
 
+    protected final ReadWriteLock dbLock = new ReentrantReadWriteLock();
 
     Path kvPath;
     KeyValueDataSource dsKV;
@@ -175,6 +178,7 @@ public class DataSourceWithAuxKV implements KeyValueDataSource {
     }
 
     public void close() {
+
         flush();
     }
 
