@@ -1,10 +1,10 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.store.ByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.BAKeyValueRelation;
 import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.db.ByteArrayWrapper;
 
-public class MyBAKeyValueRelation implements ByteArrayHashMap.BAKeyValueRelation {
+public class MyBAKeyValueRelation implements BAKeyValueRelation {
     public int intFromBytes(byte b1, byte b2, byte b3, byte b4) {
         return b1 << 24 | (b2 & 0xFF) << 16 | (b3 & 0xFF) << 8 | (b4 & 0xFF);
     }

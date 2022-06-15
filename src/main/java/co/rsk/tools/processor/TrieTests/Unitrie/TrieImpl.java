@@ -161,7 +161,33 @@ public class TrieImpl implements Trie {
 
     }
 
+    @Override
+    public void shrink() {
+        this.encoded = null;
+        this.hash = null;
+        this.hashOrchid = null;
+        this.childrenSize = null;
+        if (!hasLongValue())
+            this.valueHash = null;
 
+        // Not recursive
+        //this.left.shrink();
+        //this.right.shrink();
+
+    }
+
+    @Override
+    public void setAsTranverseLimit() {
+        getHash(); // cache the hash
+        // This way assures that the nodes won't be brought back into RAM
+        getLeft().removeLazyNode();
+        getLeft().setAbortOnTraverse(true);
+
+        getRight().removeLazyNode();
+        getRight().setAbortOnTraverse(true);
+
+
+    }
 
 
     public void checkReference() {

@@ -60,6 +60,9 @@ public class PseudoRandom {
         }
 
     }
+    public double nextDouble() {
+        return (double)(((long)this.next(26) << 27) + (long)this.next(27)) * 1.1102230246251565E-16D;
+    }
 
     final long internalNextLong(long origin, long bound) {
         long r = this.nextLong();

@@ -103,31 +103,49 @@ public class TrieStoreImpl implements TrieStore {
         }
         return result;
     }
+    public boolean shrinkDuringSave = true;
+    public boolean removeDuringSave = false; // extreme!
     /**
      * @param isRootNode it is the root node of the trie
      */
-    private void save(Trie trie, boolean isRootNode, int level) {
-        if (trie.wasSaved()) {
-            return;
-        }
-
-        logger.trace("Start saving trie, level : {}", level);
-
+    private boolean nodeAlreadySaved(Trie trie, boolean isRootNode) {
         byte[] trieKeyBytes = trie.getHash().getBytes();
 
         if (isRootNode && this.store.get(trieKeyBytes) != null) {
-            // the full trie is already saved
-            logger.trace("End saving trie, level : {}, already saved.", level);
 
             if (traceInfo != null) {
                 traceInfo.numOfNoSaves++;
             }
 
-            return;
+            return true;
         }
 
         if (traceInfo != null) {
             traceInfo.numOfSaves++;
+        }
+        return false;
+    }
+
+    private void save(Trie trie, boolean isRootNode, int level) {
+        if (trie.wasSaved()) {
+            return;
+        }
+
+        if (level==4)
+            System.out.print("S4 ");
+        logger.trace("Start saving trie, level : {}", level);
+
+        // SDL: This can be awfully slow since it requires recomputing all
+        // node hashes and keeping all hashes in memory.
+        // It's better to travel bottom up, storing nodes and disposing them
+        // immediately
+        if (!shrinkDuringSave) {
+            if (nodeAlreadySaved(trie,isRootNode)) {
+                // the full trie is already saved
+                logger.trace("End saving trie, level : {}, already saved.", level);
+
+                return;
+            }
         }
 
         NodeReference leftNodeReference = trie.getLeft();
@@ -161,18 +179,41 @@ public class TrieStoreImpl implements TrieStore {
             logger.trace("End Putting in store, hasLongValue. Level: {}", level);
         }
 
+
         if (trie.isEmbeddable() && !isRootNode) {
             logger.trace("End Saving. Level: {}", level);
             return;
         }
 
         logger.trace("Putting in store trie root.");
+        byte[] trieKeyBytes = trie.getHash().getBytes();
         this.store.put(trieKeyBytes, trie.toMessage());
+        //totalPuts++;
+        //if (totalPuts%1000==0)
+        //    System.out.println("total puts: "+totalPuts);
         trie.markAsSaved();
         logger.trace("End putting in store trie root.");
         logger.trace("End Saving trie, level: {}.", level);
+
+        if (shrinkDuringSave) {
+            leftNodeReference.shrink();
+            rightNodeReference.shrink();
+        }
+        if (removeDuringSave) {
+            leftNodeReference.clear();
+            rightNodeReference.clear();
+        }
+
+
+        // Do not dispose the root node, so that we can still obtain its hash
+        // The problem of removing the hash here is that NodeReferences
+        // will query this hash. Therefore we should shrink a node only after that
+        /*if ((!topDownSave) && (!isRootNode)) {
+            trie.shrink();
+          }*/
     }
 
+    static int totalPuts =0;
     @Override
     public void flush(){
         this.store.flush();

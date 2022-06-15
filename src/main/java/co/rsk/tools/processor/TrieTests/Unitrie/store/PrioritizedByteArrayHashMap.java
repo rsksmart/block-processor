@@ -3,7 +3,7 @@ package co.rsk.tools.processor.TrieTests.Unitrie.store;
 import co.rsk.tools.processor.TrieTests.Unitrie.AbstractByteArrayRefHeap;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
 
-public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
+public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
 
     int currentPriority;
     int minPriority;
@@ -21,7 +21,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayHashMap {
     }
 
     public int getPriority(Object key) {
-        int e = this.getNode(hash(key), key);
+        int e = this.getNode(hash(key), key,null);
         if (e!=-1) {
             e = unmarkHandle(e);
             byte[] metadata =baHeap.retrieveMetadata(e);

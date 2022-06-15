@@ -43,6 +43,7 @@ public class TrieWithENC extends TrieImpl {
         Trie node = TrieBuilder.fromMessage(trieFactory,r.message, encodedOfs, r.leftRef, r.rightRef, null);
         return node;
     }
+
     public void compressIfNecessary() {
         if (!tryToCompress) return;
         if (isEmbedded) return;

@@ -34,10 +34,13 @@ public class TrieWithDNCStore extends TrieStoreImpl  {
     }
 
     public void saveRoot(Trie trie) {
+
+        super.saveRoot(trie);
         if (useDecodeNodeCache) {
+            // This will attempt to compute all the hashes in the tree
+            // if it is a newly created tree
             DecodedNodeCache.get().storeRoot(trie);
         }
-        super.saveRoot(trie);
     }
 
     public TrieWithDNCStore(KeyValueDataSource store,boolean useDecodeNodeCache,boolean useNodeChain) {

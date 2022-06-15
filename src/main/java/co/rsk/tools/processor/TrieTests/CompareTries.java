@@ -7,6 +7,7 @@ import co.rsk.tools.crypto.cryptohash.KeccakNative;
 import co.rsk.tools.processor.TrieTests.Unitrie.*;
 import co.rsk.tools.processor.TrieTests.Unitrie.DNC.DecodedNodeCache;
 import co.rsk.tools.processor.TrieTests.Unitrie.DNC.TrieWithDNCStore;
+import co.rsk.tools.processor.TrieTests.Unitrie.DataSources.*;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.GlobalEncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.TrieWithENC;
@@ -42,7 +43,9 @@ import java.util.*;
 public class CompareTries extends Benchmark  {
     enum Database {
         LevelDB,
-        MemoryMappedByteArrayRefHeap
+        RocksDB,
+        FlatRefDB,// MemoryMappedByteArrayRefHeap
+        FlatDB // MemoryMappedByteArrayHeap
     }
 
     enum HashMapDataStructure {
@@ -58,8 +61,16 @@ public class CompareTries extends Benchmark  {
         writeTest
     }
 
-    static Database database = Database.MemoryMappedByteArrayRefHeap;
-    static Test test = Test.writeTest;
+    enum ReadMode {
+        uniformlyRandom,
+        pareto,
+        sequential
+    };
+    ReadMode readMode = ReadMode.uniformlyRandom;
+    long sequentialBase; // dynamically set later
+
+    static Database database = Database.FlatDB;
+    static Test test = Test.readTest;
 
     // For simCounter don't forget to set flushFilesystemCache to true
     StateTrieSimulator.SimMode testMode = StateTrieSimulator.SimMode.simEOAs;
@@ -68,22 +79,27 @@ public class CompareTries extends Benchmark  {
     boolean createDatabase = true;
     boolean useDecodedNodeCache = true;
     boolean useNodeChain = false;
-    boolean useWeakReferences = true;
+    boolean garbageCollectAndShowMemoryUsed = false;
+
+    // To build huge trees bottom up, the best way is to use hard references
+    // and shrink() every node during save
+    boolean useWeakReferences = false;
+    boolean shrinkNodesDuringStoreSave = false;
+    boolean removeNodesDuringStoreSave = false;
+    boolean saveNodesDuringConstruction = true;
+    boolean pruneNodesDuringConstruction = true;
     boolean testAfterWrite = false;
 
     //////////////////////////////////////
-    // For read test:
-    long maxKeysBottomUp  = 1L * (1 << 26);
-    long maxKeysTopDown = 0;// 1L * (1 << 20);//1L * (1 << 20)/2; // total: 1.5M
-    //////////////////////////////////////
-    // These only affect the write test:
-    long addMaxKeysBottomUp  = 1L * (1 << 16); // 64M keys! Woow!
+    // These affect the write test AND the read test (to choose the file):
+    long addMaxKeysBottomUp  = 1L * (1 << 20); // 8M keys
     long addMaxKeysTopDown = 0;//1L * (1 << 20);//1L * (1 << 20)/2; // total: 1.5M
-    //////////////////////////
+
 
     HashMapDataStructure hashMapDataStructure =
      //       HashMapDataStructure.NoCache;
-            HashMapDataStructure.MaxSizeHashMap;
+           HashMapDataStructure.MaxSizeHashMap;
+        //    HashMapDataStructure.MaxSizeByteArrayHashMap;
     //HashMapDataStructure.MaxSizeLinkedByteArrayHashMap;
     // HashMapDataStructure.MaxSizeByteArrayHashMap;
 
@@ -99,6 +115,12 @@ public class CompareTries extends Benchmark  {
     boolean fullyFillTopNodes = false;
     final int flushNumberOfBlocks =1000;
 
+    //////////////////////////
+    // Internal: do not set
+    //////////////////////////////////////
+    // For read test maxKeysBottom up must are loaded from addXXX:
+    long maxKeysBottomUp  = 1L * (1 << 26);
+    long maxKeysTopDown = 0;// 1L * (1 << 20);//1L * (1 << 20)/2; // total: 1.5M
 
     // 6.8M / 200 = 34K
     // Cost of read is 200 right now in RSK.
@@ -234,7 +256,30 @@ public class CompareTries extends Benchmark  {
 
         if (abortIfExists) {
             if (Files.isDirectory(trieStorePath, LinkOption.NOFOLLOW_LINKS)) {
-                throw new RuntimeException("Target trie db directory exists. Remove first");
+
+                System.out.println("Target trie db directory exists.");
+                System.out.println("enter 'del' to delete it and continue");
+                System.out.println("enter 'add' to add to the existing database and continue");
+                // Enter data using BufferReader
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(System.in));
+
+                // Reading data using readLine
+                String cmd = null;
+                try {
+                    cmd = reader.readLine();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                if (cmd==null)
+                    throw new RuntimeException("Aborting...");
+
+                boolean isDel =(cmd.equals("del"));
+                boolean isAdd =(cmd.equals("add"));
+                if ((!isDel) && (!isAdd))
+                    throw new RuntimeException("Invalid command. Target trie db directory exists. Remove first");
+                if (isDel)
+                    deleteIfExists = true;
             }
 
         }
@@ -250,11 +295,30 @@ public class CompareTries extends Benchmark  {
         if (database==Database.LevelDB) {
             //createLevelDBDatabase();
             dsDB = LevelDbDataSource.makeDataSource(trieStorePath);
-        } else {
-            int maxNodeCount = 32*1000*1000; // 32 Million nodes -> 128 Mbytes of reference cache
+        } else
+        if (database==Database.RocksDB) {
+            //createLevelDBDatabase();
+            dsDB = RocksDbDataSource.makeDataSource(trieStorePath);
+        } else
+        if (database== Database.FlatDB) {
+            long totalKeys = addMaxKeysBottomUp+ addMaxKeysTopDown;
+
+            int maxNodeCount = (int) totalKeys*2;//32*1000*1000; // 32 Million nodes -> 128 Mbytes of reference cache
             long beHeapCapacity =64L*1000*1000*1000; // 64 GB
             try {
                 dsDB = new DataSourceWithHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString());
+            } catch (IOException e) {
+                e.printStackTrace();
+                System.exit(1);
+            }
+        } else
+        if (database== Database.FlatRefDB) {
+            long totalKeys = addMaxKeysBottomUp+ addMaxKeysTopDown;
+
+            int maxNodeCount = (int) totalKeys*2;//32*1000*1000; // 32 Million nodes -> 128 Mbytes of reference cache
+            long beHeapCapacity =64L*1000*1000*1000; // 64 GB
+            try {
+                dsDB = new DataSourceWithRefHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString());
             } catch (IOException e) {
                 e.printStackTrace();
                 System.exit(1);
@@ -286,13 +350,20 @@ public class CompareTries extends Benchmark  {
     }
 
     TrieStore createTrieStore(KeyValueDataSource ds) {
+        TrieStoreImpl imp=null;
         if (GlobalEncodedObjectStore.get() != null)
-            return (TrieStore) new TrieWithENCStore(ds);
+            imp =  new TrieWithENCStore(ds);
         else if (useWeakReferences)
-            return (TrieStore) new TrieWithDNCStore(ds,useDecodedNodeCache,useNodeChain);
+            imp =  new TrieWithDNCStore(ds,useDecodedNodeCache,useNodeChain);
         else
-            return (TrieStore) new TrieStoreImpl(ds);
+            imp = new TrieStoreImpl(ds);
+
+        imp.shrinkDuringSave = shrinkNodesDuringStoreSave;
+        imp.removeDuringSave = removeNodesDuringStoreSave;
+
+        return (TrieStore) imp;
     }
+
     StateTrieSimulator stateTrieSim = new StateTrieSimulator();
 
     public void computeAverageAccountSize() {
@@ -435,7 +506,9 @@ public class CompareTries extends Benchmark  {
         return key;
     }
 
-    public  byte[] getExistentRandomKey() {
+
+
+    public  byte[] getExistentRandomKey(long i) {
         // choose according to the number of keys inserted by each method.
         // Each method (top down and bottom up) has created a set of keys.
         // Truly since keys from bottom up and top down construction are intermingled
@@ -444,9 +517,39 @@ public class CompareTries extends Benchmark  {
         // number of keys chosen overpasses the number of elements in on of the set.
         // We use the remainder "%" without introducing a huge imbalance, because our
         // set sizes are int32 ranges (not longs really).
-        long allKeys = maxKeysBottomUp+maxKeysTopDown;
-        long x =TestUtils.getPseudoRandom().nextLong(allKeys);
+        long allKeys = addMaxKeysBottomUp+addMaxKeysTopDown;
+        long x =0;
+        switch (readMode) {
+            case uniformlyRandom:
+                x=getExistentUniformlyRandomKeyIndex(allKeys);
+            case pareto:
+                x= getExistentParetoRandomKeyIndex(allKeys);
+            case sequential:
+                x =getExistentSequentialKeyIndex(i,allKeys);
+        }
+
         return getExistentKey(x);
+    }
+    public  long getExistentSequentialKeyIndex(long i,long allKeys) {
+        return (i + sequentialBase) % allKeys;
+
+    }
+
+    public  long getExistentParetoRandomKeyIndex(long allKeys) {
+        double p = 0.8;
+        if (p <= 0 || p >= 1.0)
+            throw new IllegalArgumentException();
+        double a = Math.log(1.0 - p) / Math.log(p);
+        double x = TestUtils.getPseudoRandom().nextDouble();
+        double y = (Math.pow(x, a) + 1.0 - Math.pow(1.0 - x, 1.0 / a)) / 2.0;
+        return (int) (y*allKeys);
+    }
+
+    public  long getExistentUniformlyRandomKeyIndex(long allKeys) {
+
+        long x =TestUtils.getPseudoRandom().nextLong(allKeys);
+        return x;
+
     }
     TrieStore trieStore;
 
@@ -570,7 +673,7 @@ public class CompareTries extends Benchmark  {
         if (getTrieStore()==null)
             return;
         getTrieStore().saveRoot(rootNode);
-        log("Saving trie (stop)");
+        log("Saving trie (stop) rootNodeHas="+rootNode.getHash().toHexString());
     }
 
     public void saveSubTrie(Trie subtrieRoot) {
@@ -725,8 +828,7 @@ public class CompareTries extends Benchmark  {
                                   int expectedSpeed) {
         byte[][] keys = null;
         boolean preloadKeys = passes>1;
-        boolean sequentialKeys = false;
-        long sequentialBase = maxKeysBottomUp;
+        sequentialBase = maxKeysBottomUp;
         boolean x = false;
         if (x)
             return;
@@ -760,10 +862,8 @@ public class CompareTries extends Benchmark  {
             keys = new byte[(int) (totalKeys)][];
             for (int i = 0; i < keys.length; i++) {
                 byte[] key;
-                if (sequentialKeys)
-                    key = getExistentKey((i + sequentialBase) % totalKeys);
-                else
-                    key = getExistentRandomKey();
+
+                key = getExistentRandomKey(i);
                 keys[i] = key;
             }
         }
@@ -795,18 +895,18 @@ public class CompareTries extends Benchmark  {
                     if (i % dumpIterations1 == 0) {
                         System.out.println("iteration: " + i);
                         dumpProgress(i+p*maxReads,totalReads);
-                        if (i % dumpIterations2==0)
+                        if (i % dumpIterations2==0) {
+                            showDBStats();
                             showCacheStats();
+                        }
                     }
                 }
                 byte[] key;
 
-                if (sequentialKeys)
-                    key = getExistentKey((i + sequentialBase) % totalKeys);
-                else if (preloadKeys)
+                if (preloadKeys)
                     key = keys[i % keys.length];
                 else {
-                    key = getExistentRandomKey();
+                    key = getExistentRandomKey(i);
                 }
                 if ((visual) && (i < 3)) {
                     log("" + i + ": fetching " + ByteUtil.toHexString(key));
@@ -1089,9 +1189,21 @@ public class CompareTries extends Benchmark  {
 
         Keccak256 rootNodeHash = rootNode.getHash();
 
-        // We'll store the hash in a special node
-        dsDB.put("root".getBytes(StandardCharsets.UTF_8),rootNodeHash.getBytes());
+        // if it's a isContentAddressableDatabase()
+        // We'll store the hash in a separate file, because we cannot use a fixed key.
+        // else we'll store the hash in a special node
+        //
+        if (dsDB instanceof DataSourceWithAuxKV) {
+            ((DataSourceWithAuxKV) dsDB).kvPut("root".getBytes(StandardCharsets.UTF_8), rootNodeHash.getBytes());
+        } else {
+            dsDB.put("root".getBytes(StandardCharsets.UTF_8), rootNodeHash.getBytes());
+        }
+
         log("Storing root node hash: "+rootNodeHash.toHexString());
+    }
+
+    boolean isContentAddressableDatabase() {
+      return (database== Database.FlatDB) || (database== Database.FlatRefDB);
     }
 
     void destroyTree() {
@@ -1148,9 +1260,17 @@ public class CompareTries extends Benchmark  {
         Trie root = mergeNodes(nodes);
         // If the number of nodes is above 1M, we flush them, and we remove them from
         // RAM.
-        if (nodes.length>=1_000_000) {
+        boolean treeSaved = false;
+        if ((saveNodesDuringConstruction) | (nodes.length>=1_000_000)) {
             saveSubTrie(root);
-            root =pruneNode(root);
+            treeSaved = true;
+        }
+        if ((pruneNodesDuringConstruction) && (treeSaved)) {
+            // this is a way to prune the node, but there is a better way
+            // root =pruneNode(root);
+            root.setAsTranverseLimit();
+            if (!saveNodesDuringConstruction)
+                root.markAsSaved();
         }
         return root;
     }
@@ -1500,14 +1620,13 @@ public class CompareTries extends Benchmark  {
     // Requires that the database is already loaded with all the data
     public void readTest(Class<? extends EncodedObjectStore> aClass) {
 
+        maxKeysBottomUp  = addMaxKeysBottomUp;
+        maxKeysTopDown = addMaxKeysTopDown;
 
         long totalKeys = maxKeysBottomUp+maxKeysTopDown;
 
         writesPerBlock =0;
-        String dbName = testMode.toString()+""+maxKeysBottomUp+"plus"+maxKeysTopDown;
-        if (fullyFillTopNodes)
-            dbName = dbName + "-topf_"+ getLog2Bits(maxKeysTopDown);
-        dbName = dbName + "-wpb_"+writesPerBlock;
+        String dbName =getDBName(addMaxKeysBottomUp,addMaxKeysTopDown,"");
 
         String testName ="readtest";
         String maxStr = dbName;
@@ -1532,6 +1651,9 @@ public class CompareTries extends Benchmark  {
 
     public void setRootNode(byte[] rootNodeHash) {
         if (rootNodeHash==null) {
+            if (dsDB instanceof DataSourceWithAuxKV) {
+                rootNodeHash = ((DataSourceWithAuxKV) dsDB).kvGet("root".getBytes(StandardCharsets.UTF_8));
+            } else
             rootNodeHash = dsDB.get("root".getBytes(StandardCharsets.UTF_8));
 
             log("Reading root node hash: "+  ByteUtil.toHexString(rootNodeHash));
@@ -1584,7 +1706,7 @@ public class CompareTries extends Benchmark  {
             // * some nodes are retrieved from cache
             // * some nodes are fetched from disk.
             // * some part of the tree is in memory (while processing a block)
-            long numReads = 50_000;
+            long numReads = 500_000;
             existentReadNodes(rootNode, true, numReads, 1,
                     true,false,5_000);
             //randomReadNodes(rootNode, 0);
@@ -1678,9 +1800,32 @@ public class CompareTries extends Benchmark  {
         writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,"");
         showCacheStats();
         dumpResultsInCSV();
+        closeDB();
         closeLog();
     }
 
+    public String getDBName(long addMaxKeysBottomUp,long addMaxKeysTopDown,String tmpDbNamePrefix) {
+        String dbName = testMode.toString()+""+tmpDbNamePrefix+"-"+
+                getExactCountLiteral(addMaxKeysBottomUp)+"-plus-"+
+                getExactCountLiteral(addMaxKeysTopDown);
+        if (fullyFillTopNodes)
+            dbName = dbName + "-topf_"+ getLog2Bits(addMaxKeysTopDown);
+        dbName = dbName + "-wpb_"+writesPerBlock;
+
+        if (database==Database.LevelDB) {
+            dbName =dbName +"-level";
+        } else
+            if (database==Database.RocksDB) {
+                dbName =dbName +"-rocks";
+        } else
+            if (database==Database.FlatDB) {
+            dbName =dbName +"-flt";
+        } else
+            if (database==Database.FlatDB) {
+                dbName =dbName +"-fltref";
+            }
+        return dbName;
+    }
 
     public void writeTestInternal(
             long addMaxKeysBottomUp,long addMaxKeysTopDown,String tmpDbNamePrefix ) {
@@ -1690,16 +1835,8 @@ public class CompareTries extends Benchmark  {
         // keys are top-down and how many are bottom-up
         long totalKeys = addMaxKeysBottomUp+addMaxKeysTopDown;
         writesPerBlock = 0;
-        String dbName = testMode.toString()+""+tmpDbNamePrefix+addMaxKeysBottomUp+"plus"+addMaxKeysTopDown;
-        if (fullyFillTopNodes)
-            dbName = dbName + "-topf_"+ getLog2Bits(addMaxKeysTopDown);
-        dbName = dbName + "-wpb_"+writesPerBlock;
+        String dbName =getDBName(addMaxKeysBottomUp,addMaxKeysTopDown,tmpDbNamePrefix);
 
-        if (database==Database.LevelDB) {
-
-        } else {
-            dbName =dbName +"-flat";
-        }
         if (createDatabase) {
             if (tmpDbNamePrefix.length() > 0) {
                 // Temporary DB. Can delete freely
@@ -1724,7 +1861,8 @@ public class CompareTries extends Benchmark  {
             // a real measurement of how the cache works
 
             destroyTreeAndLog();
-            showUsedMemory();
+            if (garbageCollectAndShowMemoryUsed)
+                showUsedMemory();
             if (testAfterWrite) {
                 existentReadNodes(rootNode, false, 0, 1, false, false,0);
                 countNodes("BU: ", rootNode, 0, Integer.MAX_VALUE,true);
@@ -1760,6 +1898,12 @@ public class CompareTries extends Benchmark  {
         storeRootNode();
     }
 
+
+    public void closeDB() {
+        log("Closing db...");
+        dsDB.close();
+        log("Closed");
+    }
     public void smallWorldTest(Class<? extends EncodedObjectStore> aClass) {
         testMode = StateTrieSimulator.SimMode.simEOAs;
         long addMaxKeysBottomUp  = 1L * (1 << 20);
@@ -1776,6 +1920,7 @@ public class CompareTries extends Benchmark  {
         writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,"tmp");
         readTestInternal();
         dumpResultsInCSV();
+        closeDB();
         closeLog();
     }
 
@@ -1785,8 +1930,16 @@ public class CompareTries extends Benchmark  {
         logList(" ",stats);
     }
 
+    public void showDBStats() {
+        if (!(dsDB instanceof DataSourceWithAuxKV)) return;
+        DataSourceWithAuxKV dsx = (DataSourceWithAuxKV) dsDB;
+        log("DB stats: ");
+        List<String> stats =dsx.getStats();
+        logList(" ",stats);
+    }
+
     public boolean getCacheTopPriorityOnAccess() {
-        if (dsWithCache instanceof  DataSourceWithLinkedBACache) {
+        if (dsWithCache instanceof DataSourceWithLinkedBACache) {
             return ((DataSourceWithLinkedBACache) dsWithCache).getTopPriorityOnAccess();
         }
         return false;

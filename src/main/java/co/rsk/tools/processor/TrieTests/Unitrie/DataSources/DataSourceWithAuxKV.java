@@ -1,32 +1,27 @@
-package co.rsk.tools.processor.TrieTests.Unitrie.store;
+package co.rsk.tools.processor.TrieTests.Unitrie.DataSources;
 
 import co.rsk.tools.processor.TrieTests.Logger;
 import co.rsk.tools.processor.TrieTests.LoggerFactory;
-import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
-import co.rsk.tools.processor.TrieTests.Unitrie.ByteArrayRefHeap;
 import org.ethereum.datasource.KeyValueDataSource;
+import org.ethereum.datasource.LevelDbDataSource;
 import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-public class DataSourceWithHeap implements KeyValueDataSource {
+public class DataSourceWithAuxKV implements KeyValueDataSource {
 
-    private static final Logger logger = LoggerFactory.getLogger("datasourcewithheap");
+    private static final Logger logger = LoggerFactory.getLogger("datasourcewithauxkv");
 
-    protected final Map<ByteArrayWrapper, byte[]> committedCache ;
-    ByteArrayHashMap bamap;
-    ByteArrayRefHeap sharedBaHeap;
 
-    Path mapPath;
-    Path dbPath;
+    Path kvPath;
+    KeyValueDataSource dsKV;
+    protected Map<ByteArrayWrapper, byte[]> committedCache ;
 
     public boolean readOnly = false;
     boolean dump = false;
@@ -37,14 +32,25 @@ public class DataSourceWithHeap implements KeyValueDataSource {
     long gets;
     String databaseName;
 
-    public DataSourceWithHeap( int maxNodeCount, long beHeapCapacity,String databaseName) throws IOException {
+    public DataSourceWithAuxKV(String databaseName) throws IOException {
         this.databaseName = databaseName;
-        mapPath = Paths.get(databaseName, "hash.map");
-        dbPath = Paths.get(databaseName, "store");
+        kvPath = Paths.get(databaseName, "kv");
 
-        Map<ByteArrayWrapper, byte[]> iCache = makeCommittedCache(maxNodeCount,beHeapCapacity);
-        this.committedCache = Collections.synchronizedMap(iCache);
+        // This normal LevelDV database is used to store non content-addressable KV pairs
+        // using the kvPut() kvGet() methods
+        dsKV= LevelDbDataSource.makeDataSource(kvPath);
     }
+
+    public byte[] kvGet(byte[] key) {
+        Objects.requireNonNull(key);
+        return dsKV.get(key);
+    }
+
+    public byte[] kvPut(byte[] key, byte[] value) {
+        checkReadOnly();
+        return dsKV.put(key, value);
+    }
+
 
     @Override
     public byte[] get(byte[] key) {
@@ -151,15 +157,13 @@ public class DataSourceWithHeap implements KeyValueDataSource {
 
     @Override
     public void flush() {
-
+        dsKV.flush();
     }
 
-    public String getModifiers() {
-        return "";
-    }
 
+    @Override
     public String getName() {
-            return "DataSourceWithHeap-"+databaseName;
+        return "DataSourceWithAuxKV-"+databaseName;
     }
 
     public void init() {
@@ -172,60 +176,8 @@ public class DataSourceWithHeap implements KeyValueDataSource {
 
     public void close() {
         flush();
-        try {
-            bamap.saveToFile(mapPath.toString());
-            sharedBaHeap.save(0);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        committedCache.clear();
     }
 
-    ByteArrayRefHeap createByteArrayHeap(float loadFactor,long maxNodeCount, long maxCapacity) throws IOException {
-        ByteArrayRefHeap baHeap = new ByteArrayRefHeap();
-        baHeap.setMaxMemory(maxCapacity); //730_000_000L); // 500 Mb / 1 GB
-
-        int expectedReferences = (int) (maxNodeCount*loadFactor+1);
-        baHeap.setMaxReferences(expectedReferences);
-        Files.createDirectories(Paths.get(databaseName));
-
-        baHeap.setFileName(dbPath.toString());
-        baHeap.setFileMapping(true);
-        baHeap.initialize();
-        if (baHeap.fileExists())
-            baHeap.load(); // We throw away the root...
-        return baHeap;
-
-    }
-
-    protected Map<ByteArrayWrapper, byte[]> makeCommittedCache(int maxNodeCount, long beHeapCapacity) throws IOException {
-        if (maxNodeCount==0) return null;
-
-        Map<ByteArrayWrapper, byte[]> cache;
-
-        TrieCACacheRelation myKeyValueRelation = new TrieCACacheRelation();
-
-        MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
-
-        float loadFActor =getDefaultLoadFactor();
-        int initialSize = (int) (maxNodeCount/loadFActor);
-
-        // Since we are not compressing handles, we must prepare for wost case
-
-        sharedBaHeap =
-                createByteArrayHeap(loadFActor,maxNodeCount,beHeapCapacity);
-
-
-        this.bamap =  new ByteArrayHashMap(initialSize,loadFActor,myKR,
-                (long) beHeapCapacity,
-                sharedBaHeap,0);
-
-        File f = mapPath.toFile();
-        if(f.exists() && !f.isDirectory()) {
-            bamap.readFromFile(f.getAbsolutePath(), false);
-        }
-        return bamap;
-    }
 
     public long countCommittedCachedElements() {
         if (committedCache!=null) {
@@ -243,9 +195,6 @@ public class DataSourceWithHeap implements KeyValueDataSource {
 
     public List<String> getHashtableStats() {
         List<String> list = new ArrayList<>();
-        list.add("slotChecks: " +bamap.tableSlotChecks);
-        list.add("lookups: " +bamap.tableLookups);
-        list.add("slotchecks per lookup: " +1.0*bamap.tableSlotChecks/bamap.tableLookups);
         return list;
     }
 
@@ -260,7 +209,8 @@ public class DataSourceWithHeap implements KeyValueDataSource {
         list.add("Hits: " + hits);
         list.add("Misses: " + misses);
         list.add("committedCache.size(): " + committedCache.size());
-
+        list.add("DB Hashtable stats:");
+        list.addAll(getHashtableStats());
         return list;
     }
 

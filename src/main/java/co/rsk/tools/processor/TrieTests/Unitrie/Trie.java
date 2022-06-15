@@ -314,4 +314,9 @@ public interface Trie {
     abstract public long countLeafNodes(long limit,int depthLimit,Updater updater);
 
     void accessThisNode();
+
+    // Removes from memory anything cached related to this node
+    void shrink();
+
+    void setAsTranverseLimit();
 }

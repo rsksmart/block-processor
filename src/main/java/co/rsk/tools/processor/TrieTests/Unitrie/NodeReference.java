@@ -73,5 +73,24 @@ public interface NodeReference {
      */
     public long referenceSize();
 
+    // removeLazyNode() will leave all cached data but remove the
+    // memory pointer to the child node.
     public void removeLazyNode();
+
+    // shrink() will remove all cached data and only leave the pointer
+    // to the child node.
+    public void shrink();
+
+    // setAbortOnTraverse() prevents this reference to be traversed
+    // while executing any method. If data is not cached, then an exception is risen.
+    // This is useful when building large trees to make sure certain computations
+    // (such as hashing) are not performed more than once.
+    public void setAbortOnTraverse(boolean v);
+
+    // setAbortOnRetrieval() prevents this reference to cause a retrieval from
+    // the store. Is has the same effect of clearing the store, but on error
+    // it will give a much clearer exception (not just null pointer)
+    public void setAbortOnRetrieval(boolean v);
+
+    public void clear();
 }

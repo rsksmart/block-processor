@@ -1,6 +1,9 @@
-package co.rsk.tools.processor.TrieTests.Unitrie.store;
+package co.rsk.tools.processor.TrieTests.Unitrie.DataSources;
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
+import co.rsk.tools.processor.TrieTests.Unitrie.DataSources.DataSourceWithCACache;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.PrioritizedByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.TrieCACacheRelation;
 import org.ethereum.datasource.CacheSnapshotHandler;
 import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.db.ByteArrayWrapper;

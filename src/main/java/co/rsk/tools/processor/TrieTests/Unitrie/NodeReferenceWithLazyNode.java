@@ -26,6 +26,7 @@ public class NodeReferenceWithLazyNode extends NodeReferenceImpl {
 
     public Optional<Trie> getNode(boolean persistent) {
         if (lazyNode != null) {
+            checkAbortOnTraverse();
             return Optional.of(lazyNode);
         }
 
@@ -47,13 +48,16 @@ public class NodeReferenceWithLazyNode extends NodeReferenceImpl {
             return Optional.empty();
         }
 
+        checkAbortOnTraverse();
         lazyHash = lazyNode.getHash();
         return Optional.of(lazyHash);
     }
 
     protected byte[] getSerialized() {
-        if (lazyNode!=null)
+        if (lazyNode!=null) {
+            checkAbortOnTraverse();
             return lazyNode.toMessage();
+        }
         else
             return super.getSerialized();
     }
@@ -64,6 +68,7 @@ public class NodeReferenceWithLazyNode extends NodeReferenceImpl {
         if (lazyNode == null) {
             return false;
         }
+        checkAbortOnTraverse();
         return lazyNode.isEmbeddable();
     }
 
@@ -71,6 +76,7 @@ public class NodeReferenceWithLazyNode extends NodeReferenceImpl {
     public int serializedLength() {
         if (!isEmpty()) {
             if (isEmbeddable()) {
+                checkAbortOnTraverse();
                 return lazyNode.getMessageLength() + 1;
             }
 
@@ -98,5 +104,15 @@ public class NodeReferenceWithLazyNode extends NodeReferenceImpl {
             lazyNode = null; // bye bye
     }
 
+    @Override
+    public void shrink() {
+        // nothing to shrink, because we don't cache information of nodes here
 
+    }
+
+    @Override
+    public void clear() {
+        super.clear();
+        lazyNode = null;
+    }
 }

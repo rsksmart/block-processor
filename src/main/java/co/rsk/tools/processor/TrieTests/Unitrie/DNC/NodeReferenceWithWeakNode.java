@@ -78,9 +78,33 @@ public class NodeReferenceWithWeakNode extends NodeReferenceImpl {
         return node;
     }
 
+    static SoftReference<Trie> nullRef = new SoftReference<>(null);
+
     public void removeLazyNode() {
         if (weakNode !=null)
-            weakNode = new SoftReference<>(null); // bye bye
+            weakNode = nullRef; // bye bye
+    }
+
+    public void shrink() {
+        if (strongNode!=null) {
+            strongNode.shrink();
+            lazyHash = null;
+        }
+        else {
+            Trie w = weakNode.get();
+            if (w!=null)
+                w.shrink();
+        }
+        /*
+        if (lazyHash == null)
+                lazyHash = strongNode.getHash();
+            weakNode = new SoftReference<>(strongNode);
+        }
+        if (!isEmbeddable())
+            removeLazyNode();
+        if (strongNode!=null)
+            lazyHash = null;
+         */
     }
 
     public void markAsPresentInTrieStore() {
@@ -93,6 +117,7 @@ public class NodeReferenceWithWeakNode extends NodeReferenceImpl {
         }
         strongNode = null; // no more strong references
     }
+
     public Optional<Keccak256> getHash() {
         if (lazyHash != null) {
             return Optional.of(lazyHash);

@@ -147,7 +147,7 @@ public class CompareHashmaps extends Benchmark {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             int avgElementSize =88;
             long beHeapCapacity =(long) vmax*avgElementSize*11/10;
-            map =  new ByteArrayHashMap(initialSize,loadFactor,myKR,(long) beHeapCapacity,null,0 );
+            map =  new ByteArrayRefHashMap(initialSize,loadFactor,myKR,(long) beHeapCapacity,null,0 );
         }
         else
         if (testDS== DataStructure.MaxSizeMetadataLinkedByteArrayHashMap) {
@@ -257,8 +257,8 @@ public class CompareHashmaps extends Benchmark {
             }
             if (i % 100_0000==0) {
                 dumpMemProgress(i,vmax);
-                if ((map!=null) && (map instanceof  ByteArrayHashMap)) {
-                    int longest = ((ByteArrayHashMap) map).longestFilledRun();
+                if ((map!=null) && (map instanceof ByteArrayRefHashMap)) {
+                    int longest = ((ByteArrayRefHashMap) map).longestFilledRun();
                     log("Hashmap longest filled run: "+longest);
                 }
             }
@@ -311,12 +311,12 @@ public class CompareHashmaps extends Benchmark {
         dumpSpeedResults(maxSize);
 
         log("Testing scanning and retrieving (data) only..");
-        if ((map!=null) && (map instanceof  ByteArrayHashMap)) {
+        if ((map!=null) && (map instanceof ByteArrayRefHashMap)) {
             start(false);
             int[] counter2 = new int[1];
 
             Consumer<byte[]> count = (d) -> counter2[0]++;
-            ((ByteArrayHashMap) map).forEach(count);
+            ((ByteArrayRefHashMap) map).forEach(count);
 
             stop(false);
             log("Counter2: " + counter2[0]);

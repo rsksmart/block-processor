@@ -14,6 +14,7 @@ public class Benchmark {
     public long  lastDumpIndex;
 
 
+    boolean allowForcedGarbageCollection = false;
     public long ended;
     public long endMbs;
     String logName;
@@ -37,8 +38,16 @@ public class Benchmark {
             return "1B";
         if (i==10_000_000_000L)
             return "10B";
+
+        int s =0;
+        while (s<30) {
+            if ((1<<s)==i)
+                return "(2^"+s+")";
+            s++;
+        }
         return ""+i;
     }
+
     public String getMillions(long i) {
         String maxStr = ""+ (i/1000/1000)+"M";
         return maxStr;
@@ -74,6 +83,8 @@ public class Benchmark {
 
 
     public void garbageCollector() {
+        if (!allowForcedGarbageCollection)
+            return;
         log("Forced system garbage collection");
         System.gc();
     }

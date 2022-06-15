@@ -18,6 +18,8 @@ public class NodeReferenceImpl implements NodeReference {
     // to be present UNLESS the node referenced is empty.
     protected Keccak256 lazyHash;
     protected boolean presentInTrieStore;
+    protected boolean abortOnTraverse;
+    protected boolean abortOnRetrieval;
 
     public NodeReferenceImpl(TrieStore store,  Trie node, Keccak256 hash) {
         this.store = store;
@@ -53,11 +55,23 @@ public class NodeReferenceImpl implements NodeReference {
         return getNode(false);
     }
 
+    protected void checkAbortOnTraverse() {
+        if (abortOnTraverse)
+            throw new RuntimeException("Traverse prevented");
+    }
+    protected void checkAbortOnRetrieval() {
+        if (abortOnRetrieval)
+            throw new RuntimeException("Retrieval prevented");
+    }
+
     public Optional<Trie> getNode(boolean persistent) {
 
         if (lazyHash == null) {
             return Optional.empty();
         }
+        checkAbortOnTraverse();
+        checkAbortOnRetrieval();
+
         // retrieve node from mem
         Optional<Trie> node = store.retrieve(lazyHash.getBytes());
 
@@ -187,5 +201,25 @@ public class NodeReferenceImpl implements NodeReference {
     }
 
     public void removeLazyNode() {
+    }
+
+    @Override
+    public void shrink() {
+
+    }
+    @Override
+    public void setAbortOnTraverse(boolean v) {
+        this.abortOnTraverse = v;
+    }
+
+    @Override
+    public void setAbortOnRetrieval(boolean v) {
+        this.abortOnRetrieval = v;
+    }
+
+
+    @Override
+    public void clear() {
+        lazyHash = null; // invalid from now on
     }
 }

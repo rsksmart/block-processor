@@ -1,6 +1,6 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.store.ByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.ByteArrayRefHashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.CAHashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.PrioritizedByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.TrieCACacheRelation;
@@ -76,24 +76,24 @@ public class UnitrieUnitTests {
         }
 
     }
-    public void checkNoPriorityAbove(ByteArrayHashMap bamap,int maxPriority) {
-        List<ByteArrayHashMap.TableItem> etab = bamap.exportTable();
-        for(ByteArrayHashMap.TableItem ti: etab) {
+    public void checkNoPriorityAbove(ByteArrayRefHashMap bamap, int maxPriority) {
+        List<ByteArrayRefHashMap.TableItem> etab = bamap.exportTable();
+        for(ByteArrayRefHashMap.TableItem ti: etab) {
             if (ti.priority>maxPriority)
                 throw new RuntimeException("wrong priority");
 
         }
     }
-    public void checkNoPriorityBelow(ByteArrayHashMap bamap,int minPriority) {
-        List<ByteArrayHashMap.TableItem> etab = bamap.exportTable();
-        for(ByteArrayHashMap.TableItem ti: etab) {
+    public void checkNoPriorityBelow(ByteArrayRefHashMap bamap, int minPriority) {
+        List<ByteArrayRefHashMap.TableItem> etab = bamap.exportTable();
+        for(ByteArrayRefHashMap.TableItem ti: etab) {
             if (ti.priority<minPriority)
                 throw new RuntimeException("wrong priority");
 
         }
     }
 
-    public void dumpElements(ByteArrayHashMap bamap) {
+    public void dumpElements(ByteArrayRefHashMap bamap) {
         bamap.dumpTable();
         /*
         bamap.forEach((k, v) -> {
@@ -175,7 +175,7 @@ public class UnitrieUnitTests {
     public void testByteArrayHashMap() {
         MyBAKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
         // First, create  a map without maximums
-        ByteArrayHashMap ba = new ByteArrayHashMap(100,0.3f,myBAKeyValueRelation,
+        ByteArrayRefHashMap ba = new ByteArrayRefHashMap(100,0.3f,myBAKeyValueRelation,
                 100*100,null,0);
         int max = 10;
         ByteArrayWrapper[] k = new ByteArrayWrapper[max];

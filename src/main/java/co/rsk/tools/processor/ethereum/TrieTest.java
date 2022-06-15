@@ -3,6 +3,10 @@ package co.rsk.tools.processor.ethereum;
 
 import co.rsk.tools.processor.TrieTests.*;
 import co.rsk.tools.processor.TrieTests.Unitrie.*;
+import co.rsk.tools.processor.TrieTests.Unitrie.DataSources.DataSourceWithBACache;
+import co.rsk.tools.processor.TrieTests.Unitrie.DataSources.DataSourceWithCACache;
+import co.rsk.tools.processor.TrieTests.Unitrie.DataSources.DataSourceWithCacheAndStats;
+import co.rsk.tools.processor.TrieTests.Unitrie.DataSources.DataSourceWithLinkedBACache;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
 import co.rsk.tools.processor.TrieUtils.ExpandedTrieKeySlice;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;

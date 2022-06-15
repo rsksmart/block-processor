@@ -4,7 +4,7 @@ import co.rsk.tools.processor.TrieTests.Unitrie.LinkedByteArrayRefHeap;
 import org.ethereum.db.ByteArrayWrapper;
 import java.util.BitSet;
 
-public class MaxSizeLinkedByteArrayHashMap extends ByteArrayHashMap {
+public class MaxSizeLinkedByteArrayHashMap extends ByteArrayRefHashMap {
 
     String debugKey;
 

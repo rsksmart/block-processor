@@ -637,6 +637,32 @@ public class ByteArrayHeapBase {
         return res;
     }
 
+    public long addObject(byte[] encoded,byte[] metadata) {
+        Space space;
+        int metadataLen =0;
+        if (metadata!=null)
+            metadataLen = metadata.length;
+        if (!spaceAvailFor(1+encoded.length + metadataLen +debugHeaderSize)) {
+            moveToNextCurSpace();
+            if (remapping)
+                throw new RuntimeException("Not yet prepared to switch space during remap");
+        }
+
+        space = getCurSpace();
+
+
+        // We need to store the length because
+        // the encoded form does not encode the node length in it.
+        int oldMemTop = space.memTop;
+
+        int newMemTop = storeObject(space, oldMemTop,
+                encoded, 0, encoded.length,
+                metadata,0,metadataLen);
+
+        space.memTop = newMemTop;
+        long ofs = buildPointer(curSpaceNum, oldMemTop);
+        return ofs;
+    }
 
     public int storeObject(Space destSpace, int destOldMemTop,
                            byte[] encoded,

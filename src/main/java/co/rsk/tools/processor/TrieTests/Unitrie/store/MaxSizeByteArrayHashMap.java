@@ -4,7 +4,7 @@ import co.rsk.tools.processor.TrieTests.Unitrie.AbstractByteArrayRefHeap;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
 import org.ethereum.db.ByteArrayWrapper;
 
-public class MaxSizeByteArrayHashMap extends ByteArrayHashMap {
+public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
 
     int head =-1;
     int tail=-1;
