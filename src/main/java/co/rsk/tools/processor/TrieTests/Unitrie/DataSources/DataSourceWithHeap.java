@@ -1,7 +1,7 @@
 package co.rsk.tools.processor.TrieTests.Unitrie.DataSources;
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
-import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray39HashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray40HashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.ByteArrayHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.AbstractByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.TrieCACacheRelation;
@@ -17,20 +17,37 @@ import java.util.*;
 public class DataSourceWithHeap extends DataSourceWithAuxKV {
     AbstractByteArrayHashMap bamap;
     ByteArrayHeap sharedBaHeap;
+    EnumSet<AbstractByteArrayHashMap.CreationFlag> creationFlags;
+    int dbVersion;
 
     Path mapPath;
     Path dbPath;
 
 
+    public enum LockType {
+        Exclusive,
+        RW,
+        None
+    }
 
-
-    public DataSourceWithHeap(int maxNodeCount, long beHeapCapacity, String databaseName) throws IOException {
+    public DataSourceWithHeap(int maxNodeCount, long beHeapCapacity,
+                              String databaseName,LockType lockType,
+                              EnumSet<AbstractByteArrayHashMap.CreationFlag> creationFlags,
+                              int dbVersion) throws IOException {
         super(databaseName);
+        this.creationFlags = creationFlags;
+        this.dbVersion = dbVersion;
         mapPath = Paths.get(databaseName, "hash.map");
         dbPath = Paths.get(databaseName, "store");
 
         Map<ByteArrayWrapper, byte[]> iCache = makeCommittedCache(maxNodeCount,beHeapCapacity);
-        this.committedCache = Collections.synchronizedMap(iCache);
+        if (lockType==LockType.RW)
+            this.committedCache =RWLockedCollections.rwSynchronizedMap(iCache);
+        else
+        if (lockType==LockType.Exclusive)
+            this.committedCache = Collections.synchronizedMap(iCache);
+        else
+            this.committedCache = iCache;
 
     }
 
@@ -49,7 +66,7 @@ public class DataSourceWithHeap extends DataSourceWithAuxKV {
         try {
             flush();
             try {
-                bamap.saveToFile(mapPath.toString());
+                bamap.save();
                 sharedBaHeap.save(0);
             } catch (IOException e) {
                 e.printStackTrace();
@@ -88,18 +105,23 @@ public class DataSourceWithHeap extends DataSourceWithAuxKV {
         int initialSize = (int) (maxNodeCount/loadFActor);
 
         // Since we are not compressing handles, we must prepare for wost case
-
+        // First we create a heap: this is where all values will be stored
+        // in a continuous "stream" of data.
         sharedBaHeap =
                 createByteArrayHeap(loadFActor,maxNodeCount,beHeapCapacity);
 
-
-        this.bamap =  new ByteArray39HashMap(initialSize,loadFActor,myKR,
+        // Now we create the map, which is like an index to locate the
+        // information in the heap. ·"39" is the number of bits supported
+        // in the datatype that references offsets in the heap.
+        // 2^39 bytes is equivalent to 512 Gigabytes.
+        //
+        this.bamap =  new ByteArray40HashMap(initialSize,loadFActor,myKR,
                 (long) beHeapCapacity,
-                sharedBaHeap,0);
+                sharedBaHeap,0,creationFlags,dbVersion,0);
 
-        File f = mapPath.toFile();
-        if(f.exists() && !f.isDirectory()) {
-            bamap.readFromFile(f.getAbsolutePath(), false);
+        this.bamap.setPath(mapPath);
+        if (bamap.dataFileExists()) {
+            bamap.load();
         }
         return bamap;
     }

@@ -1,13 +1,14 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray39HashMap;
-import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray63HashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray40HashMap;
+import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray64HashMap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
 import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
 import org.ethereum.util.FastByteComparisons;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.List;
 
 public class UnitrieUnitTests {
@@ -172,8 +173,9 @@ public class UnitrieUnitTests {
 
     }
 
+
     public void testByteArrayRefHashMap() {
-        MyBAKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
+        BAWrappedKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
         // First, create  a map without maximums
         ByteArrayRefHashMap ba = new ByteArrayRefHashMap(100,0.3f,myBAKeyValueRelation,
                 100*100,null,0);
@@ -182,7 +184,7 @@ public class UnitrieUnitTests {
         byte[][] v = new byte[max][];
         for(int i=0;i<max;i++) {
             v[i] = getByteArrayFromInt(i);
-            k[i] = myBAKeyValueRelation.getKeyFromData(v[i]);
+            k[i] = myBAKeyValueRelation.computeWrappedKey(v[i]);
         }
 
         ba.put(v[1]);
@@ -218,25 +220,46 @@ public class UnitrieUnitTests {
         public ByteArrayWrapper[] k = new ByteArrayWrapper[max];
         public byte[][] v = new byte[max][];
 
-        void create() {
+
+        void create(int expandValueSize,int expandCount) {
             for(int i=0;i<max;i++) {
-                v[i] = getByteArrayFromInt(i);
-                k[i] = myBAKeyValueRelation.getKeyFromData(v[i]);
+                byte[] data = getByteArrayFromInt(i);
+                if ((expandValueSize>0) && (i<expandCount)) {
+                    byte[] c = new byte[expandValueSize];
+                    System.arraycopy(data, 0, c, 0, data.length);
+                    v[i] = c;
+                } else
+                    v[i] = data;
+                k[i] = myBAKeyValueRelation.computeWrappedKey(v[i]);
             }
         }
     }
-
-    public void testByteArrayHashMap() {
+    public void testBigByteArrayHashMap() {
         KeyValues kvs = new KeyValues();
-        kvs.create();
+        kvs.create(10_000,5); // half big, half small
 
         // First, create  a map without maximums
-        AbstractByteArrayHashMap ba1 = new ByteArray39HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
-                100 * 100, null, 0);
+        AbstractByteArrayHashMap ba1 = new ByteArray40HashMap(100, 0.3f,
+                kvs.myBAKeyValueRelation,
+                100 * 10_000, null, 0,
+                AbstractByteArrayHashMap.CreationFlag.All,
+                AbstractByteArrayHashMap.latestDBVersion,0);
+        putKvs(kvs, ba1);
+        checkKvs(kvs, ba1);
+    }
+    public void testByteArrayHashMap() {
+        KeyValues kvs = new KeyValues();
+        kvs.create(0,0);
+
+        // First, create  a map without maximums
+        AbstractByteArrayHashMap ba1 = new ByteArray40HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
+                100 * 100, null, 0,
+                AbstractByteArrayHashMap.CreationFlag.All,AbstractByteArrayHashMap.latestDBVersion,0);
         testByteArrayHashMap(kvs,ba1,"test1");
 
-        AbstractByteArrayHashMap ba2 = new ByteArray63HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
-                100 * 100, null, 0);
+        AbstractByteArrayHashMap ba2 = new ByteArray64HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
+                100 * 100, null, 0,
+                AbstractByteArrayHashMap.CreationFlag.All,AbstractByteArrayHashMap.latestDBVersion,0);
         testByteArrayHashMap(kvs,ba2,"test2");
 
     }
@@ -247,8 +270,10 @@ public class UnitrieUnitTests {
         putKvs(kvs, ba);
         checkKvs(kvs, ba);
         try {
-            ba.saveToFile(testName);
-            ba.readFromFile(testName, true); // now read, mapped
+            Path path = Path.of(testName);
+            ba.setPath(path);
+            ba.save();
+            ba.load(); // now read, mapped
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -257,15 +282,16 @@ public class UnitrieUnitTests {
     }
 
     void  putKvs(KeyValues kvs , AbstractByteArrayHashMap ba) {
-        ba.put(kvs.v[1]);
-        ba.put(kvs.v[2]);
+        for (int i=0;i< kvs.max;i++) {
+            ba.put(kvs.v[i]);
+        }
     }
-    void checkKvs(KeyValues kvs , AbstractByteArrayHashMap ba) {
-        checkEqual(ba.containsKey(kvs.k[1]),true);
-        checkEqual(ba.get(kvs.k[1]),kvs.v[1]);
 
-        checkEqual(ba.containsKey(kvs.k[2]),true);
-        checkEqual(ba.get(kvs.k[2]),kvs.v[2]);
+    void checkKvs(KeyValues kvs , AbstractByteArrayHashMap ba) {
+        for (int i=0;i< kvs.max;i++) {
+            checkEqual(ba.containsKey(kvs.k[i]),true);
+            checkEqual(ba.get(kvs.k[i]),kvs.v[i]);
+        }
     }
 
     void putAndCheckKvs(KeyValues kvs , AbstractByteArrayHashMap ba) {
@@ -299,7 +325,8 @@ public class UnitrieUnitTests {
     }
     public static void main (String args[]) {
         UnitrieUnitTests u = new UnitrieUnitTests();
-        u.testByteArrayHashMap();
+        u.testBigByteArrayHashMap();
+       // u.testByteArrayHashMap();
         System.exit(0);
         u.printOverhead();
         u.testCACache();

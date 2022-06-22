@@ -201,15 +201,16 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
                 h =2;
             references[h] = buildPointer(hspace, baseOfs); // stores new reference
 
-            int dataLen = space.getByte(spaceOfs+lastMetadataLen);
+            int dataLen = getEncodedLength(space,spaceOfs+lastMetadataLen);
+            int dataLenLength = getEncodedLengthLength(space,spaceOfs+lastMetadataLen);
             // Now check that either both have indexes or none
 
-            byte[] prevObject = new byte[lastMetadataLen+F1+dataLen];
+            byte[] prevObject = new byte[lastMetadataLen+dataLenLength+dataLen];
             space.getBytes(spaceOfs,prevObject,spaceOfs,prevObject.length);
             // StoreObject receives the offset of the object data, not
             // the object header, therefore we must add F3 to spaceOfs.
             int newTop = storeObject(space, baseOfs,
-                    prevObject, lastMetadataLen + F1, dataLen,
+                    prevObject, lastMetadataLen + dataLenLength, dataLen,
                     prevObject,0,lastMetadataLen);
 
             if (h == debugHandle) {

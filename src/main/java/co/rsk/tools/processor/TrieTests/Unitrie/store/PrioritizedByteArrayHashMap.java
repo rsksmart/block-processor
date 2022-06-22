@@ -13,7 +13,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
     int startScanForRemoval =0;
 
     public PrioritizedByteArrayHashMap(int initialCapacity, float loadFactor,
-                            BAKeyValueRelation BAKeyValueRelation,
+                                       BAWrappedKeyValueRelation BAKeyValueRelation,
                             long newBeHeapCapacity,
                             AbstractByteArrayRefHeap sharedBaHeap,
                             int maxElements) {

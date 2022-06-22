@@ -1,10 +1,11 @@
 package co.rsk.tools.processor.TrieTests;
 
 import co.rsk.tools.processor.TrieTests.Unitrie.store.BAKeyValueRelation;
+import co.rsk.tools.processor.TrieTests.Unitrie.store.BAWrappedKeyValueRelation;
 import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.db.ByteArrayWrapper;
 
-public class MyBAKeyValueRelation implements BAKeyValueRelation {
+public class MyBAKeyValueRelation implements BAKeyValueRelation, BAWrappedKeyValueRelation {
     public int intFromBytes(byte b1, byte b2, byte b3, byte b4) {
         return b1 << 24 | (b2 & 0xFF) << 16 | (b3 & 0xFF) << 8 | (b4 & 0xFF);
     }
@@ -20,7 +21,22 @@ public class MyBAKeyValueRelation implements BAKeyValueRelation {
     }
 
     @Override
-    public ByteArrayWrapper getKeyFromData(byte[] data) {
+    public int getHashcode(byte[] key) {
+        return hashCodeFromHashDigest(key);
+    }
+
+    @Override
+    public byte[] computeKey(byte[] data) {
+        return Keccak256Helper.keccak256(data);
+    }
+
+    @Override
+    public int getKeySize() {
+        return 32;
+    }
+
+    @Override
+    public ByteArrayWrapper computeWrappedKey(byte[] data) {
         return new ByteArrayWrapper(Keccak256Helper.keccak256(data));
     }
 

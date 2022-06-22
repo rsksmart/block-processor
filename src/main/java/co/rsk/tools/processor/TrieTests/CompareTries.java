@@ -89,6 +89,7 @@ public class CompareTries extends Benchmark  {
     boolean saveNodesDuringConstruction = true;
     boolean pruneNodesDuringConstruction = true;
     boolean testAfterWrite = false;
+    int flatDBVersion = 1;
 
     //////////////////////////////////////
     // These affect the write test AND the read test (to choose the file):
@@ -306,7 +307,9 @@ public class CompareTries extends Benchmark  {
             int maxNodeCount = (int) totalKeys*2;//32*1000*1000; // 32 Million nodes -> 128 Mbytes of reference cache
             long beHeapCapacity =64L*1000*1000*1000; // 64 GB
             try {
-                dsDB = new FlatDB(maxNodeCount,beHeapCapacity,trieStorePath.toString());
+                // We do not support null values, and we can use the full 40 bits for offsets
+                dsDB = new FlatDB(maxNodeCount,beHeapCapacity,trieStorePath.toString(),
+                        FlatDB.CreationFlag.None,flatDBVersion);
             } catch (IOException e) {
                 e.printStackTrace();
                 System.exit(1);
@@ -673,7 +676,7 @@ public class CompareTries extends Benchmark  {
         if (getTrieStore()==null)
             return;
         getTrieStore().saveRoot(rootNode);
-        log("Saving trie (stop) rootNodeHas="+rootNode.getHash().toHexString());
+        log("Saving trie (stop) rootNodeHash="+rootNode.getHash().toHexString());
     }
 
     public void saveSubTrie(Trie subtrieRoot) {
@@ -1373,7 +1376,8 @@ public class CompareTries extends Benchmark  {
 
     }
 
-    public void createLogFile(String basename,String expectedItems) {
+    public void createLogFile(String basename,String extraArgs) {
+            boolean addTestMode = false; // now it is included in the extraArgs
             String name = "Results/"+basename;
             name=name+"-"+TrieKeySliceFactoryInstance.get().getClass().getSimpleName();
             String om;
@@ -1388,8 +1392,10 @@ public class CompareTries extends Benchmark  {
             if (useWeakReferences)
                 name = name + "-wref";
 
-            name = name + "-"+expectedItems;
-            name = name + "-" + testMode.toString();
+            name = name + "-"+extraArgs;
+
+            if (addTestMode)
+                name = name + "-" + testMode.toString();
             name = name +"-Max_"+ getMillions( Runtime.getRuntime().maxMemory());
             name = name +"-"+hashMapDataStructure.toString();
             name = name + "-SCS_"+getK(statesCacheSize);
@@ -1793,11 +1799,16 @@ public class CompareTries extends Benchmark  {
 
         String testName ="writetest";
         String maxStr = ""+ getMillions(addMaxKeysBottomUp )+"_plus_"+getMillions(addMaxKeysTopDown);
-        createLogFile(testName,maxStr);
+        String dbName =getDBName(addMaxKeysBottomUp,addMaxKeysTopDown,"");
+        String dbLogName ="db("+dbName+")";
+        dbLogName = dbLogName + "-wpb_"+writesPerBlock;
+
+        createLogFile(testName,dbLogName);
 
         setupEncodedObjectStore(aClass);
         prepare();
-        writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,"");
+
+        writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,dbName,false);
         showCacheStats();
         dumpResultsInCSV();
         closeDB();
@@ -1810,7 +1821,6 @@ public class CompareTries extends Benchmark  {
                 getExactCountLiteral(addMaxKeysTopDown);
         if (fullyFillTopNodes)
             dbName = dbName + "-topf_"+ getLog2Bits(addMaxKeysTopDown);
-        dbName = dbName + "-wpb_"+writesPerBlock;
 
         if (database==Database.LevelDB) {
             dbName =dbName +"-level";
@@ -1819,7 +1829,7 @@ public class CompareTries extends Benchmark  {
                 dbName =dbName +"-rocks";
         } else
             if (database==Database.FlatDB) {
-            dbName =dbName +"-flt";
+            dbName =dbName +"-flt"+flatDBVersion;
         } else
             if (database==Database.FlatDB) {
                 dbName =dbName +"-fltref";
@@ -1828,17 +1838,17 @@ public class CompareTries extends Benchmark  {
     }
 
     public void writeTestInternal(
-            long addMaxKeysBottomUp,long addMaxKeysTopDown,String tmpDbNamePrefix ) {
+            long addMaxKeysBottomUp,long addMaxKeysTopDown,String dbName,boolean tmpDb) {
 
-
+//         (tmpDbNamePrefix.length() > 0)
         // To be able to reconstruct existing kety, we need to know how many
         // keys are top-down and how many are bottom-up
         long totalKeys = addMaxKeysBottomUp+addMaxKeysTopDown;
         writesPerBlock = 0;
-        String dbName =getDBName(addMaxKeysBottomUp,addMaxKeysTopDown,tmpDbNamePrefix);
+
 
         if (createDatabase) {
-            if (tmpDbNamePrefix.length() > 0) {
+            if (tmpDb) {
                 // Temporary DB. Can delete freely
                 openTrieStore(true, false, dbName);
             } else
@@ -1913,11 +1923,13 @@ public class CompareTries extends Benchmark  {
         prepare();
         String testName ="swtest";
         String maxStr = ""+ getMillions(addMaxKeysBottomUp )+" plus "+getMillions(addMaxKeysTopDown);
+        String dbName =getDBName(addMaxKeysBottomUp,addMaxKeysTopDown,"tmp");
+        String dbLogName ="db("+dbName+")";
 
-        createLogFile(testName,maxStr);
+        createLogFile(testName,dbLogName);
         logGlobalClasses();
 
-        writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,"tmp");
+        writeTestInternal(addMaxKeysBottomUp, addMaxKeysTopDown,dbName,true);
         readTestInternal();
         dumpResultsInCSV();
         closeDB();

@@ -126,6 +126,8 @@ public class TrieStoreImpl implements TrieStore {
         return false;
     }
 
+    public static String debugKey;
+
     private void save(Trie trie, boolean isRootNode, int level) {
         if (trie.wasSaved()) {
             return;
@@ -187,6 +189,9 @@ public class TrieStoreImpl implements TrieStore {
 
         logger.trace("Putting in store trie root.");
         byte[] trieKeyBytes = trie.getHash().getBytes();
+        if ((debugKey!=null) && trie.getHash().toString().equals(debugKey)) {
+            debugKey = debugKey;
+        }
         this.store.put(trieKeyBytes, trie.toMessage());
         //totalPuts++;
         //if (totalPuts%1000==0)

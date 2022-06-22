@@ -36,10 +36,29 @@ public class LongTable implements Table {
             return table.length;
     }
 
+
     @Override
     public void copyTo(FileChannel file, int ofs) throws IOException {
         // Child to -do
           FileMapUtil.mapAndCopyLongArray(file,ofs,table.length,table);
+    }
+
+    @Override
+    public void update(FileChannel file, int ofs) throws IOException {
+        // update not implemented
+        FileMapUtil.mapAndCopyLongArray(file,ofs,table.length,table);
+    }
+
+    @Override
+    public
+    void fillWithZero() {
+        Arrays.fill(table, 0);
+    }
+
+    public
+    static
+    int  getElementSize() { // in bytes
+        return 8;
     }
 
     @Override
@@ -55,5 +74,10 @@ public class LongTable implements Table {
             // TO DO: compress here
             setPos(i, din.readLong());
         }
+    }
+
+    @Override
+    public void clearPageTracking() {
+
     }
 }

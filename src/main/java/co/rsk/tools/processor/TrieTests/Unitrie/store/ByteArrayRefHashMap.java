@@ -40,7 +40,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
     int maxElements;
     boolean logEvents = true;
 
-    BAKeyValueRelation BAKeyValueRelation;
+    BAWrappedKeyValueRelation BAKeyValueRelation;
     AbstractByteArrayRefHeap baHeap;
 
 
@@ -68,7 +68,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
         if (BAKeyValueRelation == null)
             return key.hashCode();
         else
-            return BAKeyValueRelation.getHashcode((ByteArrayWrapper) key);
+            return BAKeyValueRelation.getHashcode(((ByteArrayWrapper) key));
     }
 
 
@@ -79,7 +79,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
 
 
     public ByteArrayRefHashMap(int initialCapacity, float loadFactor,
-                               BAKeyValueRelation BAKeyValueRelation,
+                               BAWrappedKeyValueRelation BAKeyValueRelation,
                                long newBeHeapCapacity,
                                AbstractByteArrayRefHeap sharedBaHeap,
                                int maxElements) {
@@ -138,7 +138,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
         boolean remove(byte[] key, byte[] data);
     }
 
-    public ByteArrayRefHashMap(int initialCapacity, BAKeyValueRelation BAKeyValueRelation) {
+    public ByteArrayRefHashMap(int initialCapacity, BAWrappedKeyValueRelation BAKeyValueRelation) {
         this(initialCapacity, DEFAULT_LOAD_FACTOR, BAKeyValueRelation,defaultNewBeHeapCapacity,null,0);
     }
 
@@ -711,8 +711,9 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
     }
 
     public ByteArrayWrapper computeKey(byte[] e) {
-        return BAKeyValueRelation.getKeyFromData((byte[]) e);
+        return BAKeyValueRelation.computeWrappedKey((byte[]) e);
     }
+
 
     public Object clone() {
         ByteArrayRefHashMap result;

@@ -3,6 +3,7 @@ package co.rsk.tools.processor.TrieTests.Unitrie;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.util.BitSet;
 
 public class FileMapUtil {
 
@@ -46,6 +47,8 @@ public class FileMapUtil {
         }
     }
 
+    // size is the size of the table.
+    // the size of the file would be "size+offset"
     static public void mapAndCopyByteArray(FileChannel file, long offset, long size, byte[] table) throws IOException {
         int count=0;
         int longCount=0;
@@ -63,6 +66,35 @@ public class FileMapUtil {
             offset +=len;
             longLeft -=len;
             longCount +=len;
+        }
+    }
+    static public void mapAndCopyByteArrayPages(FileChannel file, long offset, long size, byte[] table,
+                                                BitSet modifiedPages,int pageSize,int pageCount) throws IOException {
+        // For optimum performance offset should be a multiple of pageSize
+        int count=0;
+        if (offset+((long) pageSize)*pageCount > Integer.MAX_VALUE)
+            throw new RuntimeException("Too big to map");
+
+        ByteBuffer buf;
+
+        // Maximum map size is 2GB, same as a byte array.
+        long len = offset+size; // avoid increasing file size
+        buf = file.map(FileChannel.MapMode.READ_WRITE, 0,  len );
+        int logBase =0;
+        for(int i=0;i<pageCount;i++) {
+            if (modifiedPages.get(i)) {
+                int pageOfs = pageSize*i;
+                int mapOfs = i*pageSize+(int) offset;
+                buf.position(mapOfs);
+                for (int b=0;b<pageSize;b++) {
+                    buf.put(table[b+pageOfs]);
+                }
+                count+=pageSize;
+                if (count > logBase ) {
+                    logBase = logBase+1_000_000;
+                    System.out.println("" + (count * 100L / size) + "%");
+                }
+            }
         }
     }
 }

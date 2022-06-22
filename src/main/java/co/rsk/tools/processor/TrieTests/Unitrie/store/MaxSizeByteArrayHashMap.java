@@ -37,7 +37,7 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
     }
 
     public MaxSizeByteArrayHashMap(int initialCapacity, float loadFactor,
-                                       BAKeyValueRelation BAKeyValueRelation,
+                                   BAWrappedKeyValueRelation BAKeyValueRelation,
                                        long newBeHeapCapacity,
                                        AbstractByteArrayRefHeap sharedBaHeap,
                                        int maxElements) {

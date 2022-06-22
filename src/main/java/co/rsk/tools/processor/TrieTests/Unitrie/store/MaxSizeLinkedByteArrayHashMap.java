@@ -19,7 +19,7 @@ public class MaxSizeLinkedByteArrayHashMap extends ByteArrayRefHashMap {
     boolean topPriorityOnAccess;
 
     public MaxSizeLinkedByteArrayHashMap(int initialCapacity, float loadFactor,
-                                   BAKeyValueRelation BAKeyValueRelation,
+                                         BAWrappedKeyValueRelation BAKeyValueRelation,
                                    long newBeHeapCapacity,
                                          LinkedByteArrayRefHeap sharedBaHeap,
                                    int maxElements,boolean topPriorityOnAccess) {

@@ -6,8 +6,6 @@ import co.rsk.tools.processor.TrieTests.oheap.MemoryMappedSpace;
 import co.rsk.tools.processor.TrieTests.oheap.Space;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.List;
@@ -37,9 +35,9 @@ public class ByteArrayHeapBase {
     final int freeSpaces;
     final int compressSpaces; // == maxSpaces means compress all
 
-    static final int F0 = 0; // field 0 is 1  bytes in length
-    static final int F1 = 1;
-
+    static final int maxEncodedLengthFieldSize = 4;
+    static final int maxDataSize = Integer.MAX_VALUE; // 1 bit reserved to mark extended length
+    static final int extendedSize  = (1<<31); // 0x80000000
 
     public Space[] spaces;
     public BitSet oldSpacesBitmap = new BitSet();
@@ -556,7 +554,7 @@ public class ByteArrayHeapBase {
     }
 
     public boolean spaceAvailFor(int msgLength) {
-        msgLength += F1;
+        msgLength += maxEncodedLengthFieldSize;
         return (getCurSpace().spaceAvailFor(msgLength));
 
     }
@@ -681,7 +679,7 @@ public class ByteArrayHeapBase {
         } else
             lastMetadataLen = metadataLength;
 
-        if (encodedLength > 127)
+        if (encodedLength > maxDataSize)
             throw new RuntimeException("encoding too long");
 
         if (encodedOffset + encodedLength > encoded.length)
@@ -693,9 +691,9 @@ public class ByteArrayHeapBase {
             destSpace.setBytes(newMemTop,metadata,metadataOffset,metadataLength);
             newMemTop += metadataLength;
         }
+        int lenLength = putEncodedLength(destSpace,newMemTop,encodedLength);
 
-        destSpace.putByte(newMemTop,(byte) encodedLength); // max 127 byte
-        newMemTop += F1;
+        newMemTop += lenLength;
 
         destSpace.setBytes(newMemTop,encoded,encodedOffset,encodedLength);
         newMemTop += len;
@@ -704,6 +702,42 @@ public class ByteArrayHeapBase {
         return newMemTop;
     }
 
+
+    // returns the length of the field
+    public int putEncodedLength(Space destSpace, int newMemTop, int encodedLength) {
+        if (encodedLength<=127) {
+            destSpace.putByte(newMemTop, (byte) encodedLength); // max 127 bytes
+            return 1;
+        }
+        else {
+            // Directly use an int32
+            if (encodedLength>maxDataSize)
+                throw new RuntimeException("encoded data too large");
+            int value = encodedLength | extendedSize;
+            // This will cause the first byte to be negative when read as a byte.
+            destSpace.putInt(newMemTop, value);
+            return 4;
+        }
+
+    }
+    public int getEncodedLengthLength(Space space, int dataOfs) {
+        int len = space.getByte(dataOfs);
+        // Zero length is not permitted.
+        if ((len <= 127) && (len >= 0)) {
+            return 1;
+        }
+        return 4;
+    }
+
+    public int getEncodedLength( Space space, int dataOfs) {
+        int len = space.getByte(dataOfs);
+
+        if ((len <= 127) && (len >= 0)) {
+            return len;
+        }
+        int value = space.getInt(dataOfs);
+        return (value & maxDataSize);
+    }
 
     public void validMetadataLength() {
         if (lastMetadataLen==-1)
@@ -723,11 +757,14 @@ public class ByteArrayHeapBase {
         int internalOfs = getSpaceOfsFromPointer(ptrSpaceNum, encodedOfs);
         checkDebugHeader(space, internalOfs);
         int dataOfs = internalOfs+lastMetadataLen;
-        byte[] d = new byte[space.getByte(dataOfs)];
-        checkDebugFooter(space, internalOfs + lastMetadataLen + F1 +  d.length);
-        space.getBytes(dataOfs + F1, d, 0, d.length);
+        int elen = getEncodedLength(space,dataOfs);
+        byte[] d = new byte[elen ];
+        int lenLength = getEncodedLengthLength(space,dataOfs);
+        checkDebugFooter(space, internalOfs + lastMetadataLen + lenLength +  d.length);
+        space.getBytes(dataOfs + lenLength, d, 0, d.length);
         return d;
     }
+
 
     public byte[] retrieveMetadataByOfs(long encodedOfs) {
         Space space;
@@ -763,11 +800,10 @@ public class ByteArrayHeapBase {
         checkDebugHeader(space, internalOfs);
         validMetadataLength();
         // Get the max size window
-        int len = space.getByte(internalOfs+lastMetadataLen);
-        if ((len > 127) || (len < 0))
-            throw new RuntimeException("invalid length");
+        int len = getEncodedLength(space,internalOfs+lastMetadataLen);
+        int lenLength = getEncodedLengthLength(space,internalOfs+lastMetadataLen);
 
-        checkDebugFooter(space, internalOfs + lastMetadataLen+ F1 + len);
+        checkDebugFooter(space, internalOfs + lastMetadataLen+ lenLength + len);
     }
 
 
