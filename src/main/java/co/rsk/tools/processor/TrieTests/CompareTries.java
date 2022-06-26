@@ -7,15 +7,15 @@ import co.rsk.tools.crypto.cryptohash.KeccakNative;
 import co.rsk.tools.processor.TrieTests.Unitrie.*;
 import co.rsk.tools.processor.TrieTests.Unitrie.DNC.DecodedNodeCache;
 import co.rsk.tools.processor.TrieTests.Unitrie.DNC.TrieWithDNCStore;
-import co.rsk.tools.processor.TrieTests.Unitrie.DataSources.*;
+import co.rsk.tools.processor.TrieTests.DataSources.*;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.EncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.GlobalEncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.TrieWithENC;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.TrieWithENCStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
-import co.rsk.tools.processor.TrieTests.oheap.LongEOR;
-import co.rsk.tools.processor.TrieTests.oheap.EncodedObjectHeap;
-import co.rsk.tools.processor.TrieTests.orefheap.EncodedObjectRefHeap;
+import co.rsk.tools.processor.TrieTests.objectstores.oheap.LongEOR;
+import co.rsk.tools.processor.TrieTests.objectstores.oheap.EncodedObjectHeap;
+import co.rsk.tools.processor.TrieTests.objectstores.orefheap.EncodedObjectRefHeap;
 import co.rsk.tools.processor.TrieUtils.CompactTrieKeySlice;
 import co.rsk.tools.processor.TrieUtils.ExpandedTrieKeySlice;
 import co.rsk.tools.processor.TrieUtils.TrieKeySlice;
@@ -309,7 +309,7 @@ public class CompareTries extends Benchmark  {
             try {
                 // We do not support null values, and we can use the full 40 bits for offsets
                 dsDB = new FlatDB(maxNodeCount,beHeapCapacity,trieStorePath.toString(),
-                        FlatDB.CreationFlag.None,flatDBVersion);
+                        EnumSet.of(FlatDB.CreationFlag.supportAdditionalKV),flatDBVersion);
             } catch (IOException e) {
                 e.printStackTrace();
                 System.exit(1);
@@ -321,7 +321,7 @@ public class CompareTries extends Benchmark  {
             int maxNodeCount = (int) totalKeys*2;//32*1000*1000; // 32 Million nodes -> 128 Mbytes of reference cache
             long beHeapCapacity =64L*1000*1000*1000; // 64 GB
             try {
-                dsDB = new DataSourceWithRefHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString());
+                dsDB = new DataSourceWithRefHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString(),true);
             } catch (IOException e) {
                 e.printStackTrace();
                 System.exit(1);

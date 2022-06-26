@@ -1,7 +1,7 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.store.BAKeyValueRelation;
-import co.rsk.tools.processor.TrieTests.Unitrie.store.BAWrappedKeyValueRelation;
+import co.rsk.tools.processor.TrieTests.bahashmaps.BAKeyValueRelation;
+import co.rsk.tools.processor.TrieTests.bahashmaps.BAWrappedKeyValueRelation;
 import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.db.ByteArrayWrapper;
 

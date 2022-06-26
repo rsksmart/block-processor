@@ -1,7 +1,7 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.FileMapUtil;
-import co.rsk.tools.processor.TrieTests.Unitrie.DataSources.DataSourceWithRefHeap;
+import co.rsk.tools.processor.TrieTests.dbutils.FileMapUtil;
+import co.rsk.tools.processor.TrieTests.DataSources.DataSourceWithRefHeap;
 import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.datasource.LevelDbDataSource;
@@ -164,7 +164,7 @@ public class CompareDBs extends Benchmark {
             beHeapCapacity =1L*maxNodeCount*valueLength; // 1 MB
             log("beHeap:Capacity: "+beHeapCapacity);
             try {
-                dsDB = new DataSourceWithRefHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString());
+                dsDB = new DataSourceWithRefHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString(),false);
             } catch (IOException e) {
                 e.printStackTrace();
                 System.exit(1);

@@ -1,8 +1,10 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray40HashMap;
-import co.rsk.tools.processor.TrieTests.Unitrie.ByteArray64HashMap;
-import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
+import co.rsk.tools.processor.TrieTests.bahashmaps.*;
+import co.rsk.tools.processor.TrieTests.DataSources.FlatDB;
+import co.rsk.tools.processor.TrieTests.cahashmaps.CAHashMap;
+import co.rsk.tools.processor.TrieTests.cahashmaps.TrieCACacheRelation;
+import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.db.ByteArrayWrapper;
 import org.ethereum.util.ByteUtil;
 import org.ethereum.util.FastByteComparisons;
@@ -216,12 +218,15 @@ public class UnitrieUnitTests {
 
     class KeyValues {
         public MyBAKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
-        public int max = 10;
-        public ByteArrayWrapper[] k = new ByteArrayWrapper[max];
-        public byte[][] v = new byte[max][];
+        public int max;
+        public ByteArrayWrapper[] k ;
+        public byte[][] v ;
 
 
-        void create(int expandValueSize,int expandCount) {
+        void create(int max,int expandValueSize,int expandCount) {
+            this.max = max;
+            k= new ByteArrayWrapper[max];
+            v = new byte[max][];
             for(int i=0;i<max;i++) {
                 byte[] data = getByteArrayFromInt(i);
                 if ((expandValueSize>0) && (i<expandCount)) {
@@ -234,9 +239,37 @@ public class UnitrieUnitTests {
             }
         }
     }
+    public void testIncrementalSaveForFlatDB() {
+        int nodeCount = 1000;
+        int maxNodeSize = 10_000;
+        KeyValues kvs = new KeyValues();
+        kvs.create(nodeCount,maxNodeSize,nodeCount/2); // half big, half small
+
+        try {
+            int heapCapacity = nodeCount*maxNodeSize*3/2;
+            FlatDB db = new FlatDB(nodeCount,heapCapacity, "testdif",
+                    FlatDB.CreationFlag.All,FlatDB.latestDBVersion);
+            int maxSaves = 10;
+            int nodesPerSave = nodeCount/maxSaves;
+            int nodesSaved = nodesPerSave*maxSaves;
+            for(int i=0;i<maxSaves;i++) {
+                putKvs(kvs,db,i*nodesPerSave,(i+1)*nodesPerSave);
+                db.flush();
+            }
+            db.close();
+            // Now re-open, and check everything is ok
+            db = new FlatDB(nodeCount,heapCapacity, "testdif",
+                    FlatDB.CreationFlag.All,FlatDB.latestDBVersion);
+            checkKvs(kvs,db,0,nodesSaved);
+            db.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     public void testBigByteArrayHashMap() {
         KeyValues kvs = new KeyValues();
-        kvs.create(10_000,5); // half big, half small
+        kvs.create(10,10_000,5); // half big, half small
 
         // First, create  a map without maximums
         AbstractByteArrayHashMap ba1 = new ByteArray40HashMap(100, 0.3f,
@@ -247,9 +280,10 @@ public class UnitrieUnitTests {
         putKvs(kvs, ba1);
         checkKvs(kvs, ba1);
     }
+
     public void testByteArrayHashMap() {
         KeyValues kvs = new KeyValues();
-        kvs.create(0,0);
+        kvs.create(10,0,0);
 
         // First, create  a map without maximums
         AbstractByteArrayHashMap ba1 = new ByteArray40HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
@@ -281,6 +315,18 @@ public class UnitrieUnitTests {
 
     }
 
+    void  putKvs(KeyValues kvs , AbstractByteArrayHashMap ba,int from,int to_excluded) {
+        for (int i=from;i< to_excluded;i++) {
+            ba.put(kvs.v[i]);
+        }
+    }
+
+    void  putKvs(KeyValues kvs , KeyValueDataSource ds, int from, int to_excluded) {
+        for (int i=from;i< to_excluded;i++) {
+            ds.put(kvs.k[i].getData(),kvs.v[i]);
+        }
+    }
+
     void  putKvs(KeyValues kvs , AbstractByteArrayHashMap ba) {
         for (int i=0;i< kvs.max;i++) {
             ba.put(kvs.v[i]);
@@ -291,6 +337,12 @@ public class UnitrieUnitTests {
         for (int i=0;i< kvs.max;i++) {
             checkEqual(ba.containsKey(kvs.k[i]),true);
             checkEqual(ba.get(kvs.k[i]),kvs.v[i]);
+        }
+    }
+
+    void checkKvs(KeyValues kvs , KeyValueDataSource ds,int from,int to_excluded) {
+        for (int i=from;i<to_excluded;i++) {
+            checkEqual(ds.get(kvs.k[i].getData()),kvs.v[i]);
         }
     }
 
@@ -325,7 +377,8 @@ public class UnitrieUnitTests {
     }
     public static void main (String args[]) {
         UnitrieUnitTests u = new UnitrieUnitTests();
-        u.testBigByteArrayHashMap();
+        u.testIncrementalSaveForFlatDB();
+        //u.testBigByteArrayHashMap();
        // u.testByteArrayHashMap();
         System.exit(0);
         u.printOverhead();

@@ -1,8 +1,15 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.Unitrie.LinkedByteArrayRefHeap;
-import co.rsk.tools.processor.TrieTests.Unitrie.SimpleByteArrayRefHeap;
+import co.rsk.tools.processor.TrieTests.bahashmaps.ByteArrayRefHashMap;
+import co.rsk.tools.processor.TrieTests.bahashmaps.MaxSizeByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.bahashmaps.MaxSizeLinkedByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.bahashmaps.PrioritizedByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.baheaps.LinkedByteArrayRefHeap;
+import co.rsk.tools.processor.TrieTests.baheaps.SimpleByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
+import co.rsk.tools.processor.TrieTests.cahashmaps.CAHashMap;
+import co.rsk.tools.processor.TrieTests.cahashmaps.MaxSizeCAHashMap;
+import co.rsk.tools.processor.TrieTests.cahashmaps.TrieCACacheRelation;
 import co.rsk.util.MaxSizeHashMap;
 import org.ethereum.db.ByteArrayWrapper;
 

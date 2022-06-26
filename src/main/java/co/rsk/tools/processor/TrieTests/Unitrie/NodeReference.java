@@ -17,11 +17,9 @@
  */
 package co.rsk.tools.processor.TrieTests.Unitrie;
 
-import co.rsk.core.types.ints.Uint8;
 import co.rsk.crypto.Keccak256;
 
-import co.rsk.tools.processor.TrieTests.ohmap.HashEOR;
-import org.ethereum.crypto.Keccak256Helper;
+import co.rsk.tools.processor.TrieTests.objectstores.ohmap.HashEOR;
 
 import java.nio.ByteBuffer;
 import java.util.Optional;

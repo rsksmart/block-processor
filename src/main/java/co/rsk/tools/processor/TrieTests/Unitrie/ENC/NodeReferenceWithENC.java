@@ -2,7 +2,7 @@ package co.rsk.tools.processor.TrieTests.Unitrie.ENC;
 
 import co.rsk.crypto.Keccak256;
 import co.rsk.tools.processor.TrieTests.Unitrie.*;
-import co.rsk.tools.processor.TrieTests.ohmap.HashEOR;
+import co.rsk.tools.processor.TrieTests.objectstores.ohmap.HashEOR;
 
 import java.util.Optional;
 

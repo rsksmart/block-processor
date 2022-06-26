@@ -1,12 +1,8 @@
 package co.rsk.tools.processor.TrieTests.Unitrie.store;
 
+import co.rsk.tools.processor.TrieTests.cahashmaps.CAHashMap;
 import org.ethereum.crypto.Keccak256Helper;
 import org.ethereum.db.ByteArrayWrapper;
-
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.function.BiConsumer;
 
 public class TSNodeCACacheRelation implements CAHashMap.KeyValueRelation<ByteArrayWrapper,TSNode> {
     public  int intFromBytes(byte b1, byte b2, byte b3, byte b4) {
@@ -45,7 +41,7 @@ public class TSNodeCACacheRelation implements CAHashMap.KeyValueRelation<ByteArr
         data.priority = latestPriority;
         if (!evict)
             return;
-        if (map.size<=limit) return;
+        if (map.size()<=limit) return;
 
         // Remove 20%
         minPriority = minPriority+ (latestPriority-minPriority)/10;
