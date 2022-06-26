@@ -49,18 +49,18 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
     void itemStored(int markedHandle) {
         Link tailLink = null;
         if (tail!=-1) {
-            byte[] tailMetadata = baHeap.retrieveMetadata(unmarkHandle(tail));
+            byte[] tailMetadata = baHeap.retrieveMetadataByHandle(unmarkHandle(tail));
             tailLink = new Link(tailMetadata);
         }
         byte[] m = new byte[metadataSize];
         Link newHeadLink = new Link(tail,-1,m);
         newHeadLink.store();
-        baHeap.setMetadata(unmarkHandle(markedHandle),newHeadLink.metadata);
+        baHeap.setMetadataByHandle(unmarkHandle(markedHandle),newHeadLink.metadata);
 
         if (tail!=-1) {
             tailLink.next = markedHandle;
             tailLink.store();
-            baHeap.setMetadata(unmarkHandle(tail), tailLink.metadata);
+            baHeap.setMetadataByHandle(unmarkHandle(tail), tailLink.metadata);
         } else {
             head = markedHandle;
             tail = markedHandle;
@@ -74,9 +74,9 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
 
         // Take one element from the head
         int headHandle = unmarkHandle(head);
-        byte[] headMetadata = baHeap.retrieveMetadata(headHandle);
+        byte[] headMetadata = baHeap.retrieveMetadataByHandle(headHandle);
         Link headLink = new Link(headMetadata);
-        byte[] headData = baHeap.retrieveData(headHandle);
+        byte[] headData = baHeap.retrieveDataByHandle(headHandle);
         ByteArrayWrapper key;
         if (isValueHandle(head)) {
             key = computeKey(headData);
@@ -94,7 +94,7 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
     void afterNodeAccess(int markedHandle, byte[] p) {
         // Unlink and relink at tail
         int handle = unmarkHandle(markedHandle);
-        byte[] metadata = baHeap.retrieveMetadata(handle);
+        byte[] metadata = baHeap.retrieveMetadataByHandle(handle);
         Link link = new Link(metadata);
         int prev = link.prev;
         int next = link.next;
@@ -112,13 +112,13 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
 
     void setLink(int markedHandle,boolean setPrev,int prev,boolean setNext,int next) {
         int handle = unmarkHandle(markedHandle);
-        byte[] metadata = baHeap.retrieveMetadata(handle);
+        byte[] metadata = baHeap.retrieveMetadataByHandle(handle);
         Link link = new Link(metadata);
         if (setNext)
             link.next = next;
         if (setPrev)
             link.prev = prev;
         link.store();
-        baHeap.setMetadata(handle,link.metadata);
+        baHeap.setMetadataByHandle(handle,link.metadata);
     }
 }

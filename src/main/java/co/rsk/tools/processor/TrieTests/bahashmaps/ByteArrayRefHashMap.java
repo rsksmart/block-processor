@@ -254,12 +254,12 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
             if (markedHandle == empty)
                 return -1;
             if (!isValueHandle(markedHandle)) {
-                byte[] keyBytes = baHeap.retrieveData(unmarkHandle(markedHandle));
+                byte[] keyBytes = baHeap.retrieveDataByHandle(unmarkHandle(markedHandle));
                 if (ByteUtil.fastEquals(keyBytes, ((ByteArrayWrapper)key).getData() )) {
                     return markedHandle;
                 }
             } else {
-                byte[] data = baHeap.retrieveData(markedHandle);
+                byte[] data = baHeap.retrieveDataByHandle(markedHandle);
                 ByteArrayWrapper aKey = computeKey(data);
                 if (aKey.equals(key)) {
                     if (result!=null) {
@@ -290,7 +290,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
     final void setItemInTable(int i,int hash,byte[] key,byte[] data,byte[] metadata,boolean evict) {
         int handle ;
         if (table[i]!=empty) {
-            baHeap.remove(unmarkHandle(table[i]));
+            baHeap.removeObjectByHandle(unmarkHandle(table[i]));
             table[i] = empty;
         } else
             this.size++;
@@ -298,10 +298,10 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
         if (i==8046)
             i = i;
         if (data==null) {
-            handle = baHeap.add(key, metadata);
+            handle = baHeap.addAndReturnHandle(key, metadata);
             table[i] = setNullHandle(handle);
         }   else {
-            handle = baHeap.add(data, metadata);
+            handle = baHeap.addAndReturnHandle(data, metadata);
             table[i] = handle;
         }
         if (handle==debugHandle)
@@ -343,7 +343,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
             if (!isValueHandle(p)) {
                 // The previous value was a null
                 oldValue = null;
-                byte[] keyBytes = baHeap.retrieveData(unmarkHandle(p));
+                byte[] keyBytes = baHeap.retrieveDataByHandle(unmarkHandle(p));
                 if (ByteUtil.fastEquals(keyBytes, ((ByteArrayWrapper)key).getData() )) {
                     // Key matches
                     if (value==null)  {
@@ -362,7 +362,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                     break;
                 }
             } else {
-                oldValue =baHeap.retrieveData(p);
+                oldValue =baHeap.retrieveDataByHandle(p);
                 if (value==null) {
                     // replacing a value with null?
                     // I think this case never happens. Why would the value be null?
@@ -416,9 +416,9 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                 byte[] key = null;
                 byte[] data = null;
                 if (!isValueHandle(p)) {
-                    key = baHeap.retrieveData(unmarkHandle(p));
+                    key = baHeap.retrieveDataByHandle(unmarkHandle(p));
                     } else {
-                    data = baHeap.retrieveData(p);
+                    data = baHeap.retrieveDataByHandle(p);
                 }
                 if (rem.remove(key,data)) {
                     table[j] = empty;
@@ -470,10 +470,10 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                     byte[] key;
                     ByteArrayWrapper k;
                     if (!isValueHandle(p)) {
-                        key = baHeap.retrieveData(unmarkHandle(p));
+                        key = baHeap.retrieveDataByHandle(unmarkHandle(p));
                         k = new ByteArrayWrapper(key);
                     } else {
-                        byte[] data = baHeap.retrieveData(p);
+                        byte[] data = baHeap.retrieveDataByHandle(p);
                         k = computeKey(data);
                     }
                     int hc = hash(k);
@@ -512,7 +512,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
         if (!isValueHandle(e)) {
             return null;
         }
-        return baHeap.retrieveData(e);
+        return baHeap.retrieveDataByHandle(e);
     }
 
     int debugHandle = 954396;
@@ -544,7 +544,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                 return -1;
             }
             if (!isValueHandle(p)) {
-                exkey =baHeap.retrieveData(unmarkHandle(p));
+                exkey =baHeap.retrieveDataByHandle(unmarkHandle(p));
                 if (ByteUtil.fastEquals(exkey, ((ByteArrayWrapper)key).getData() )) {
                     table[index] = empty;
                     fillGap(index,n);
@@ -553,14 +553,14 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
             } else {
                 if (p==debugHandle)
                     p = p;
-                exdata = baHeap.retrieveData(p);
+                exdata = baHeap.retrieveDataByHandle(p);
                 ByteArrayWrapper exKeyBA = computeKey(exdata);
                 if (exKeyBA.equals(key)) {
                     exkey = exKeyBA.getData();
                     table[index] = empty;
                     if ((index==1) || (index==0))
                         index = index;
-                    baHeap.remove(p);
+                    baHeap.removeObjectByHandle(p);
                     fillGap(index, n);
                     break;
                 }
@@ -610,10 +610,10 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
             if (p== empty)
                 continue;
             if (!isValueHandle(p)) {
-                byte[] key =    baHeap.retrieveData(unmarkHandle(p));
+                byte[] key =    baHeap.retrieveDataByHandle(unmarkHandle(p));
                 ks.add(new ByteArrayWrapper(key));
             } else {
-                byte[] data = baHeap.retrieveData(p);
+                byte[] data = baHeap.retrieveDataByHandle(p);
                 ByteArrayWrapper aKey = computeKey(data);
                 ks.add(aKey);
             }
@@ -634,7 +634,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
             if (p== empty)
                 continue;
             if (isValueHandle(p)) {
-                byte[] data = baHeap.retrieveData(p);
+                byte[] data = baHeap.retrieveDataByHandle(p);
                 vs.add(data);
             }
         }
@@ -693,10 +693,10 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                     if (p== empty)
                         continue;
                     if (!isValueHandle(p)) {
-                        byte[] key =    baHeap.retrieveData(unmarkHandle(p));
+                        byte[] key =    baHeap.retrieveDataByHandle(unmarkHandle(p));
                         action.accept(new ByteArrayWrapper(key), null);
                     } else {
-                        byte[] data = baHeap.retrieveData(p);
+                        byte[] data = baHeap.retrieveDataByHandle(p);
                         ByteArrayWrapper aKey = computeKey(data);
                         action.accept(aKey, (byte[]) data);
                     }
@@ -824,13 +824,13 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
         TableItem ti = new TableItem();
         ti.handle = table[c];
         if (isValueHandle(ti.handle)) {
-            ti.data = baHeap.retrieveData(ti.handle);
+            ti.data = baHeap.retrieveDataByHandle(ti.handle);
             ti.key = computeKey(ti.data);
         } else {
-            ti.key =new ByteArrayWrapper(baHeap.retrieveData(unmarkHandle(ti.handle)));
+            ti.key =new ByteArrayWrapper(baHeap.retrieveDataByHandle(unmarkHandle(ti.handle)));
             ti.data = null;
         }
-        ti.metadata = baHeap.retrieveMetadata(unmarkHandle(ti.handle));
+        ti.metadata = baHeap.retrieveMetadataByHandle(unmarkHandle(ti.handle));
 
         fillTableItem(ti);
 
@@ -876,7 +876,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
         for (int c = 0; c < count; ++c) {
             int p = table[c];
             if (p != empty) {
-                baHeap.remap(p);
+                baHeap.remapByHandle(p);
             }
         }
         baHeap.endRemap();
@@ -918,10 +918,10 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                 return false;
             ByteArrayWrapper key;
             if (!isValueHandle(h)) {
-                byte[] keyBytes =  baHeap.retrieveData(unmarkHandle(h));
+                byte[] keyBytes =  baHeap.retrieveDataByHandle(unmarkHandle(h));
                 key = new ByteArrayWrapper(keyBytes);
             } else {
-                byte[] data = baHeap.retrieveData(h);
+                byte[] data = baHeap.retrieveDataByHandle(h);
                 key = computeKey(data);
             }
             int keyHash = hash(key) ;
@@ -964,7 +964,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                         // this is not a data entry, but a key entry. TO DO
                         throw new RuntimeException("null entries not supported");
                     }
-                    byte[] data = baHeap.retrieveData(p);
+                    byte[] data = baHeap.retrieveDataByHandle(p);
                     //s.writeObject(computeKey(data));
                     s.writeObject(data);
                 }
@@ -1030,10 +1030,10 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                 // right slot.
                 ByteArrayWrapper aKey;
                 if (!isValueHandle(p)) {
-                    byte[] keyBytes = baHeap.retrieveData(unmarkHandle(p));
+                    byte[] keyBytes = baHeap.retrieveDataByHandle(unmarkHandle(p));
                     aKey = new ByteArrayWrapper(keyBytes);
                 } else {
-                    byte[] data = baHeap.retrieveData(p);
+                    byte[] data = baHeap.retrieveDataByHandle(p);
                     aKey = computeKey(data);
                 }
                 int pos = hash(aKey) & (table.length-1);
@@ -1067,7 +1067,7 @@ public class ByteArrayRefHashMap extends AbstractMap<ByteArrayWrapper, byte[]> i
                         if (!isValueHandle(p)) {
                            // Does it make sense to accept a null? Probably not
                         } else {
-                            byte[] data = baHeap.retrieveData(table[i]);
+                            byte[] data = baHeap.retrieveDataByHandle(table[i]);
                             action.accept(data);
                         }
 

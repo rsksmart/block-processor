@@ -635,7 +635,7 @@ public class ByteArrayHeapBase {
         return res;
     }
 
-    public long addObject(byte[] encoded,byte[] metadata) {
+    public long addObjectReturnOfs(byte[] encoded, byte[] metadata) {
         Space space;
         int metadataLen =0;
         if (metadata!=null)
@@ -790,7 +790,7 @@ public class ByteArrayHeapBase {
         space.setBytes(internalOfs,metadata,0,lastMetadataLen);
      }
 
-    public void checkObject(long encodedOfs) {
+    public void checkObjectByOfs(long encodedOfs) {
         Space space;
 
         int ptrSpaceNum = getSpaceNumOfPointer(encodedOfs);

@@ -14,12 +14,12 @@ public class ByteArrayHeap extends ByteArrayHeapBase implements AbstractByteArra
     }
 
     @Override
-    public void removeObject(long encodedOfs) {
+    public void removeObjectByOfs(long encodedOfs) {
 
     }
 
     @Override
-    public void remap(long encodedOfs) {
+    public void remapByOfs(long encodedOfs) {
 
     }
 

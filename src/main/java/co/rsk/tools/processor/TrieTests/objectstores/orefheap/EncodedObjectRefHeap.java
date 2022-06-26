@@ -76,7 +76,7 @@ public class EncodedObjectRefHeap extends EncodedObjectStore {
 
     public EncodedObjectRef remap(EncodedObjectRef aRef, EncodedObjectRef aleftRef, EncodedObjectRef arightRef) {
         int handle = getHandle(aRef);
-        baHeap.remap(handle);
+        baHeap.remapByHandle(handle);
         return aRef;
     }
 
@@ -138,7 +138,7 @@ public class EncodedObjectRefHeap extends EncodedObjectStore {
         int handle = getHandle(encodedOfs);
         if (handle == -1)
             throw new RuntimeException("no data");
-        byte[] mem = baHeap.retrieveData(handle);
+        byte[] mem = baHeap.retrieveDataByHandle(handle);
         // Now remove the last 8 bytes
         byte[] encoded = Arrays.copyOf(mem,mem.length-8);
         return encoded;
@@ -149,7 +149,7 @@ public class EncodedObjectRefHeap extends EncodedObjectStore {
         int handle = getHandle(encodedRef);
         if (handle == -1)
             throw new RuntimeException("no data");
-        byte[] data = baHeap.retrieveData(handle);
+        byte[] data = baHeap.retrieveDataByHandle(handle);
 
         int rLength = data.length-8;
 

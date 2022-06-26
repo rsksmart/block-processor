@@ -406,7 +406,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
             // We can't remove data from the baHeap now. But we'll keep
             // removal functionality if needed later.
             long pureOffset = getPureOffsetFromMarkedOffset(table.getPos(i));
-            baHeap.removeObject(pureOffset);
+            baHeap.removeObjectByOfs(pureOffset);
             tableSetPos(i, emptyMarkedOffset);
         } else
             this.size++;
@@ -414,16 +414,16 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
         long markedOffset;
 
         if (data==null) {
-            offset = baHeap.addObject(key, metadata);
+            offset = baHeap.addObjectReturnOfs(key, metadata);
             markedOffset =getNullMarkedOffsetFromPureOffset(offset);
         }   else {
             if (data.length>StoreKeyThreshold) {
                 // Append the key before the data
                 byte[] keyPlusData = concat(key,data);
-                offset = baHeap.addObject(keyPlusData, metadata);
+                offset = baHeap.addObjectReturnOfs(keyPlusData, metadata);
                 markedOffset = getBigValueMarkedOffsetFromPureOffset(offset);
             } else {
-                offset = baHeap.addObject(data, metadata);
+                offset = baHeap.addObjectReturnOfs(data, metadata);
                 markedOffset = getValueMarkedOffsetFromPureOffset(offset);
             }
         }
@@ -682,7 +682,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
             boolean sameKey =fastCompareKPDWithKey(kpd,(ByteArrayWrapper) key,p);
             if (sameKey) {
                 if (isValueMarkedOffset(p)) //*
-                    baHeap.removeObject(pureOffset);
+                    baHeap.removeObjectByOfs(pureOffset);
                 tableSetPos(index, emptyMarkedOffset);
                 fillGap(index,n);
                 break;
@@ -983,7 +983,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
         for (int c = 0; c < count; ++c) {
             long p = table.getPos(c);
             if (p != emptyMarkedOffset) {
-                baHeap.checkObject(p);
+                baHeap.checkObjectByOfs(p);
             }
         }
     }
@@ -996,7 +996,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
         for (int c = 0; c < count; ++c) {
             long p = table.getPos(c);
             if (p != emptyMarkedOffset) {
-                baHeap.remap(p);
+                baHeap.remapByOfs(p);
             }
         }
         baHeap.endRemap();

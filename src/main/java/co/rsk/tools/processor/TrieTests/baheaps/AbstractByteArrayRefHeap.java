@@ -1,6 +1,6 @@
 package co.rsk.tools.processor.TrieTests.baheaps;
 
-public interface AbstractByteArrayRefHeap {
+public interface AbstractByteArrayRefHeap /*extends AbstractByteArrayHeap*/{
 
     public boolean heapIsAlmostFull();
     public boolean isRemapping();
@@ -8,17 +8,17 @@ public interface AbstractByteArrayRefHeap {
     public void endRemap();
     public int getUsagePercent();
 
-    public void remove(int handle);
-    public byte[] retrieveData(int handle) ;
+    public void removeObjectByHandle(int handle);
+    public byte[] retrieveDataByHandle(int handle) ;
 
-    public void setMetadata(int handle, byte[] metadata) ;
+    public void setMetadataByHandle(int handle, byte[] metadata) ;
 
-    public byte[] retrieveMetadata(int handle) ;
+    public byte[] retrieveMetadataByHandle(int handle) ;
 
-    public int add(byte[] encoded,byte[] metadata);
+    public int addAndReturnHandle(byte[] encoded, byte[] metadata);
 
     public void checkHandle(int handle);
-    public void remap(int handle);
+    public void remapByHandle(int handle);
 
 
 }

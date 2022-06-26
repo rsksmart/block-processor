@@ -82,7 +82,7 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
         super.reset();
     }
 
-    public void remove(int handle) {
+    public void removeObjectByHandle(int handle) {
         // removes are handled with remaps. You can't remove a single element
     }
 
@@ -258,7 +258,7 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
             long ofs = references[i];
             if (ofs == -1) // unassigned
                 continue;
-            checkObject(ofs);
+            checkObjectByOfs(ofs);
 
         }
         System.out.println("Checked!");
@@ -319,7 +319,7 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
     }
 
 
-    public void remap(int handle) {
+    public void remapByHandle(int handle) {
         // mark if it needs movement
         if (handle != -1) {
             if (touchedHandles.get(handle)) {
@@ -361,13 +361,13 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
         return addGetHandle(encoded,null);
     }
 
-    public int add(byte[] encoded,byte[] metadata) {
+    public int addAndReturnHandle(byte[] encoded, byte[] metadata) {
         return addGetHandle(encoded,metadata);
     }
 
     public int addGetHandle(byte[] encoded,byte[] metadata) {
 
-        long ofs = addObject(encoded,metadata);
+        long ofs = addObjectReturnOfs(encoded,metadata);
         if (unusedHandlesCount==0) {
             throw new RuntimeException("No more handles!");
         }
@@ -387,19 +387,19 @@ public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteA
 
 
 
-    public byte[] retrieveData(int handle) {
+    public byte[] retrieveDataByHandle(int handle) {
         if (handle == -1)
             throw new RuntimeException("no data");
         return retrieveDataByOfs(references[handle]);
     }
 
-    public void setMetadata(int handle, byte[] metadata) {
+    public void setMetadataByHandle(int handle, byte[] metadata) {
         if (handle == -1)
             throw new RuntimeException("no data");
         setMetadataByOfs(references[handle],metadata);
     }
 
-    public byte[] retrieveMetadata(int handle) {
+    public byte[] retrieveMetadataByHandle(int handle) {
         if (handle == -1)
             throw new RuntimeException("no data");
         return retrieveMetadataByOfs(references[handle]);

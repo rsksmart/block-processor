@@ -6,7 +6,7 @@ public interface AbstractByteArrayHeap {
 
     public List<String> getStats();;
 
-    public long addObject(byte[] encoded,byte[] metadata);
+    public long addObjectReturnOfs(byte[] encoded, byte[] metadata);
 
     public byte[] retrieveDataByOfs(long encodedOfs);
 
@@ -14,14 +14,14 @@ public interface AbstractByteArrayHeap {
 
     public void setMetadataByOfs(long encodedOfs,byte [] metadata);
 
-    public void checkObject(long encodedOfs);
+    public void checkObjectByOfs(long encodedOfs);
 
-    public void removeObject(long encodedOfs);
+    public void removeObjectByOfs(long encodedOfs);
 
     public boolean isRemapping();
     public void beginRemap() ;
     public void endRemap();
-    public void remap(long encodedOfs);
+    public void remapByOfs(long encodedOfs);
     public int getUsagePercent();
 
 }

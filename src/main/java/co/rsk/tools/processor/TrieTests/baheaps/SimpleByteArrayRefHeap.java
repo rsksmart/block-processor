@@ -48,7 +48,7 @@ public class SimpleByteArrayRefHeap implements AbstractByteArrayRefHeap {
         return newHandle;
     }
 
-    public void remove(int handle) {
+    public void removeObjectByHandle(int handle) {
             removeHandle(handle);
     }
 
@@ -84,24 +84,24 @@ public class SimpleByteArrayRefHeap implements AbstractByteArrayRefHeap {
     }
 
     @Override
-    public byte[] retrieveData(int handle) {
+    public byte[] retrieveDataByHandle(int handle) {
         return data[handle];
     }
 
     @Override
-    public void setMetadata(int handle, byte[] ametadata) {
+    public void setMetadataByHandle(int handle, byte[] ametadata) {
         System.arraycopy(ametadata,0,metadata,handle*metadataSize,metadataSize);
     }
 
     @Override
-    public byte[] retrieveMetadata(int handle) {
+    public byte[] retrieveMetadataByHandle(int handle) {
         byte[] r = new byte[metadataSize];
         System.arraycopy(metadata,handle*metadataSize,r,0,metadataSize);
         return r;
     }
 
     @Override
-    public int add(byte[] encoded, byte[] metadata) {
+    public int addAndReturnHandle(byte[] encoded, byte[] metadata) {
         return getNewHandle(encoded);
     }
 
@@ -113,7 +113,7 @@ public class SimpleByteArrayRefHeap implements AbstractByteArrayRefHeap {
     }
 
     @Override
-    public void remap(int handle) {
+    public void remapByHandle(int handle) {
 
     }
 }

@@ -50,7 +50,7 @@ public class MaxSizeLinkedByteArrayHashMap extends ByteArrayRefHashMap {
 
     void evictOldest() {
         int oldest = lba.getOldest();
-        byte[] pdata = baHeap.retrieveData(oldest);
+        byte[] pdata = baHeap.retrieveDataByHandle(oldest);
 
         ByteArrayWrapper wkey;
 
