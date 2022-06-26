@@ -1,6 +1,8 @@
 package co.rsk.tools.processor.TrieTests.baheaps;
 
-public interface AbstractByteArrayRefHeap /*extends AbstractByteArrayHeap*/{
+import java.util.List;
+
+public interface AbstractByteArrayRefHeap {
 
     public boolean heapIsAlmostFull();
     public boolean isRemapping();
@@ -20,5 +22,6 @@ public interface AbstractByteArrayRefHeap /*extends AbstractByteArrayHeap*/{
     public void checkHandle(int handle);
     public void remapByHandle(int handle);
 
+    public List<String> getStats();
 
 }
