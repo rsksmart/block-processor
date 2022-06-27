@@ -35,7 +35,10 @@ public class UnitrieUnitTests {
         float loadFActor = 0.3f;
         beHeapCapacity =(long) maxSize*avgElementSize*14/10;
 
-        PrioritizedByteArrayHashMap bamap =  new PrioritizedByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,maxSize );
+        PrioritizedByteArrayHashMap bamap =  new PrioritizedByteArrayHashMap(initialSize,loadFActor,
+                myKR,(long) beHeapCapacity,null,maxSize ,
+                null);
+
         bamap.removeInBulk = removeInBulk;
         bamap.MaxPriority = 30;
         boolean dumpTables = false;
@@ -177,16 +180,17 @@ public class UnitrieUnitTests {
 
 
     public void testByteArrayRefHashMap() {
-        BAWrappedKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
+        BAKeyValueRelation myBAKeyValueRelation  = new MyBAKeyValueRelation();
         // First, create  a map without maximums
         ByteArrayRefHashMap ba = new ByteArrayRefHashMap(100,0.3f,myBAKeyValueRelation,
-                100*100,null,0);
+                100*100,null,0,
+                null);
         int max = 10;
         ByteArrayWrapper[] k = new ByteArrayWrapper[max];
         byte[][] v = new byte[max][];
         for(int i=0;i<max;i++) {
             v[i] = getByteArrayFromInt(i);
-            k[i] = myBAKeyValueRelation.computeWrappedKey(v[i]);
+            k[i] = new ByteArrayWrapper(myBAKeyValueRelation.computeKey(v[i]));
         }
 
         ba.put(v[1]);
@@ -275,8 +279,7 @@ public class UnitrieUnitTests {
         AbstractByteArrayHashMap ba1 = new ByteArray40HashMap(100, 0.3f,
                 kvs.myBAKeyValueRelation,
                 100 * 10_000, null, 0,
-                AbstractByteArrayHashMap.CreationFlag.All,
-                AbstractByteArrayHashMap.latestDBVersion,0);
+                null);
         putKvs(kvs, ba1);
         checkKvs(kvs, ba1);
     }
@@ -288,12 +291,12 @@ public class UnitrieUnitTests {
         // First, create  a map without maximums
         AbstractByteArrayHashMap ba1 = new ByteArray40HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
                 100 * 100, null, 0,
-                AbstractByteArrayHashMap.CreationFlag.All,AbstractByteArrayHashMap.latestDBVersion,0);
+                null);
         testByteArrayHashMap(kvs,ba1,"test1");
 
         AbstractByteArrayHashMap ba2 = new ByteArray64HashMap(100, 0.3f, kvs.myBAKeyValueRelation,
                 100 * 100, null, 0,
-                AbstractByteArrayHashMap.CreationFlag.All,AbstractByteArrayHashMap.latestDBVersion,0);
+                null);
         testByteArrayHashMap(kvs,ba2,"test2");
 
     }

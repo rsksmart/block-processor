@@ -1,6 +1,8 @@
 package co.rsk.tools.processor.TrieTests.DataSources;
 
 import co.rsk.tools.processor.TrieTests.bahashmaps.AbstractByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.bahashmaps.Format;
+
 import java.io.IOException;
 import java.util.EnumSet;
 
@@ -19,13 +21,20 @@ public class FlatDB extends DataSourceWithHeap {
         public static final EnumSet<CreationFlag> None = EnumSet.noneOf(CreationFlag.class);
     }
 
+    public static Format getFormat(EnumSet<CreationFlag> creationFlags,int dbVersion) {
+        Format format = new Format();
+        format.creationFlags = convertFlatDBFlags(creationFlags);
+        format.dbVersion = dbVersion;
+        return format;
+    }
     public FlatDB(int maxNodeCount, long beHeapCapacity, String databaseName,
                   EnumSet<CreationFlag> creationFlags,int dbVersion) throws IOException {
         // single-thread test:
         //  With rwlocks or exclusive locks: 85k/sec.
         //  Without locks: 102K/sec
-        super(maxNodeCount, beHeapCapacity,databaseName,LockType.RW,convertFlatDBFlags(creationFlags),
-                dbVersion,(creationFlags.contains(CreationFlag.supportAdditionalKV)));
+        super(maxNodeCount, beHeapCapacity,databaseName,LockType.RW,
+                getFormat(creationFlags,dbVersion),
+                (creationFlags.contains(CreationFlag.supportAdditionalKV)));
         this.flags = creationFlags;
     }
 

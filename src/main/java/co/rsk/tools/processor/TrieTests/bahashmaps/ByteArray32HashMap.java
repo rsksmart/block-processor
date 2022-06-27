@@ -1,14 +1,14 @@
 package co.rsk.tools.processor.TrieTests.bahashmaps;
 
-import co.rsk.tools.processor.TrieTests.packedtables.Table;
-import co.rsk.tools.processor.TrieTests.packedtables.UInt40Table;
 import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayHeap;
+import co.rsk.tools.processor.TrieTests.packedtables.Int32Table;
+import co.rsk.tools.processor.TrieTests.packedtables.Table;
 
 import java.util.EnumSet;
 
-public class ByteArray40HashMap extends AbstractByteArrayHashMap {
+public class ByteArray32HashMap extends AbstractByteArrayHashMap {
 
-    public ByteArray40HashMap(int initialCapacity, float loadFactor,
+    public ByteArray32HashMap(int initialCapacity, float loadFactor,
                               co.rsk.tools.processor.TrieTests.bahashmaps.BAKeyValueRelation BAKeyValueRelation,
                               long newBeHeapCapacity,
                               AbstractByteArrayHeap sharedBaHeap,
@@ -22,14 +22,13 @@ public class ByteArray40HashMap extends AbstractByteArrayHashMap {
     }
 
     protected int getElementSize() {
-        return UInt40Table.getElementSize();
+        return Int32Table.getElementSize();
     }
 
     protected Table createTable(int cap)
     {
-        UInt40Table table;
-        table = new UInt40Table(cap);
+        Int32Table table;
+        table = new Int32Table(cap);
         return table;
     }
-
 }

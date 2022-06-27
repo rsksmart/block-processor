@@ -13,6 +13,7 @@ import co.rsk.tools.processor.TrieTests.Unitrie.ENC.GlobalEncodedObjectStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.TrieWithENC;
 import co.rsk.tools.processor.TrieTests.Unitrie.ENC.TrieWithENCStore;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
+import co.rsk.tools.processor.TrieTests.bahashmaps.AbstractByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.objectstores.oheap.LongEOR;
 import co.rsk.tools.processor.TrieTests.objectstores.oheap.EncodedObjectHeap;
 import co.rsk.tools.processor.TrieTests.objectstores.orefheap.EncodedObjectRefHeap;
@@ -321,7 +322,9 @@ public class CompareTries extends Benchmark  {
             int maxNodeCount = (int) totalKeys*2;//32*1000*1000; // 32 Million nodes -> 128 Mbytes of reference cache
             long beHeapCapacity =64L*1000*1000*1000; // 64 GB
             try {
-                dsDB = new DataSourceWithRefHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString(),true);
+                dsDB = new DataSourceWithRefHeap(maxNodeCount,beHeapCapacity,trieStorePath.toString(),
+                        DataSourceWithHeap.LockType.Exclusive,
+                        null,true);
             } catch (IOException e) {
                 e.printStackTrace();
                 System.exit(1);

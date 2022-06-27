@@ -2,6 +2,8 @@ package co.rsk.tools.processor.TrieTests.baheaps;
 
 import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayRefHeap;
 
+import java.util.List;
+
 public class SimpleByteArrayRefHeap implements AbstractByteArrayRefHeap {
 
     byte[][] data;
@@ -115,5 +117,10 @@ public class SimpleByteArrayRefHeap implements AbstractByteArrayRefHeap {
     @Override
     public void remapByHandle(int handle) {
 
+    }
+
+    @Override
+    public List<String> getStats() {
+        return null;
     }
 }

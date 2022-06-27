@@ -1,5 +1,6 @@
 package co.rsk.tools.processor.TrieTests.baheaps;
 
+import java.io.IOException;
 import java.util.List;
 
 public interface AbstractByteArrayHeap {
@@ -23,5 +24,8 @@ public interface AbstractByteArrayHeap {
     public void endRemap();
     public void remapByOfs(long encodedOfs);
     public int getUsagePercent();
+
+    public long load() throws IOException;
+    public void save(long rootOfs) throws IOException;
 
 }

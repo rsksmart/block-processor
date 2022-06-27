@@ -1,6 +1,8 @@
 package co.rsk.tools.processor.TrieTests.DataSources;
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
+import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayHeap;
+import co.rsk.tools.processor.TrieTests.baheaps.ByteArrayHeapRefProxy;
 import co.rsk.tools.processor.TrieTests.baheaps.LinkedByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.bahashmaps.MaxSizeLinkedByteArrayHashMap;
 import org.ethereum.datasource.CacheSnapshotHandler;
@@ -51,9 +53,11 @@ public class DataSourceWithLinkedBACache extends DataSourceWithCacheAndStats {
 
         int initialSize = (int) (cacheSize/loadFActor);
         LinkedByteArrayRefHeap sharedBaHeap = new LinkedByteArrayRefHeap(cacheSize,8);
+        AbstractByteArrayHeap bah = new ByteArrayHeapRefProxy(sharedBaHeap);
         MaxSizeLinkedByteArrayHashMap bamap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFActor,
                 myKR,0,
-                sharedBaHeap,cacheSize, topPriorityOnAccess);
+                bah,sharedBaHeap,
+                cacheSize, topPriorityOnAccess,null);
 
         Map<ByteArrayWrapper, byte[]> cache =bamap;
         if (cacheSnapshotHandler != null) {

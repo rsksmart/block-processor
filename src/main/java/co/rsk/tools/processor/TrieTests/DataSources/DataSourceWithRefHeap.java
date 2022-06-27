@@ -2,6 +2,11 @@ package co.rsk.tools.processor.TrieTests.DataSources;
 
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
+import co.rsk.tools.processor.TrieTests.bahashmaps.AbstractByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.bahashmaps.Format;
+import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayHeap;
+import co.rsk.tools.processor.TrieTests.baheaps.ByteArrayHeap;
+import co.rsk.tools.processor.TrieTests.baheaps.ByteArrayHeapRefProxy;
 import co.rsk.tools.processor.TrieTests.baheaps.ByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.bahashmaps.ByteArrayRefHashMap;
 import co.rsk.tools.processor.TrieTests.cahashmaps.TrieCACacheRelation;
@@ -9,32 +14,22 @@ import co.rsk.tools.processor.TrieTests.cahashmaps.TrieCACacheRelation;
 import org.ethereum.db.ByteArrayWrapper;
 
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
 
-public class DataSourceWithRefHeap extends DataSourceWithAuxKV {
+public class DataSourceWithRefHeap extends DataSourceWithHeap {
 
-    ByteArrayRefHashMap bamap;
-    ByteArrayRefHeap sharedBaHeap;
-
-    Path mapPath;
-    Path dbPath;
+    Format format;
 
     public DataSourceWithRefHeap(int maxNodeCount, long beHeapCapacity,
-                                 String databaseName,boolean additionalKV) throws IOException {
-        super(databaseName,additionalKV);
-
-        mapPath = Paths.get(databaseName, "hash.map");
-        dbPath = Paths.get(databaseName, "store");
-
-        Map<ByteArrayWrapper, byte[]> iCache = makeCommittedCache(maxNodeCount,beHeapCapacity);
-        this.committedCache = Collections.synchronizedMap(iCache);
-
+                                 String databaseName, LockType lockType,
+                                 Format format, boolean additionalKV) throws IOException {
+        super(maxNodeCount,  beHeapCapacity,
+        databaseName,lockType,format, additionalKV);
+        this.format = format;
 
     }
 
@@ -47,19 +42,8 @@ public class DataSourceWithRefHeap extends DataSourceWithAuxKV {
             return "DataSourceWithRefHeap-"+databaseName;
     }
 
-    public void close() {
-        flush();
-        try {
-            bamap.saveToFile(mapPath.toString());
-            sharedBaHeap.save(0);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        committedCache.clear();
-        dsKV.close();
-    }
 
-    ByteArrayRefHeap createByteArrayHeap(float loadFactor,long maxNodeCount, long maxCapacity) throws IOException {
+    AbstractByteArrayHeap createByteArrayHeap(float loadFactor, long maxNodeCount, long maxCapacity) throws IOException {
         ByteArrayRefHeap baHeap = new ByteArrayRefHeap();
         baHeap.setMaxMemory(maxCapacity); //730_000_000L); // 500 Mb / 1 GB
 
@@ -67,6 +51,7 @@ public class DataSourceWithRefHeap extends DataSourceWithAuxKV {
 
         int expectedReferences =(int) maxNodeCount;
         baHeap.setMaxReferences(expectedReferences);
+
         Files.createDirectories(Paths.get(databaseName));
 
         baHeap.setFileName(dbPath.toString());
@@ -74,8 +59,9 @@ public class DataSourceWithRefHeap extends DataSourceWithAuxKV {
         baHeap.initialize();
         if (baHeap.fileExists())
             baHeap.load(); // We throw away the root...
-        return baHeap;
 
+        AbstractByteArrayHeap bah = new ByteArrayHeapRefProxy(baHeap);
+        return bah;
     }
 
     protected Map<ByteArrayWrapper, byte[]> makeCommittedCache(int maxNodeCount, long beHeapCapacity) throws IOException {
@@ -98,22 +84,15 @@ public class DataSourceWithRefHeap extends DataSourceWithAuxKV {
 
         this.bamap =  new ByteArrayRefHashMap(initialSize,loadFActor,myKR,
                 (long) beHeapCapacity,
-                sharedBaHeap,0);
+                sharedBaHeap,0,
+                format);
 
-        File f = mapPath.toFile();
-        if(f.exists() && !f.isDirectory()) {
-            bamap.readFromFile(f.getAbsolutePath(), false);
+        this.bamap.setPath(mapPath);
+        if (bamap.dataFileExists()) {
+            bamap.load();
         }
         return bamap;
     }
 
-
-    public List<String> getHashtableStats() {
-        List<String> list = new ArrayList<>();
-        list.add("slotChecks: " +bamap.tableSlotChecks);
-        list.add("lookups: " +bamap.tableLookups);
-        list.add("slotchecks per lookup: " +1.0*bamap.tableSlotChecks/bamap.tableLookups);
-        return list;
-    }
 
 }

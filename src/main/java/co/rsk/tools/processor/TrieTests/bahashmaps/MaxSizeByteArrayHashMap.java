@@ -1,8 +1,13 @@
 package co.rsk.tools.processor.TrieTests.bahashmaps;
 
+import co.rsk.tools.processor.TrieTests.DataSources.DataSourceWithHeap;
+import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayHeap;
 import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayRefHeap;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
 import org.ethereum.db.ByteArrayWrapper;
+
+import java.io.IOException;
+import java.util.EnumSet;
 
 public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
 
@@ -37,11 +42,13 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
     }
 
     public MaxSizeByteArrayHashMap(int initialCapacity, float loadFactor,
-                                   BAWrappedKeyValueRelation BAKeyValueRelation,
-                                       long newBeHeapCapacity,
-                                       AbstractByteArrayRefHeap sharedBaHeap,
-                                       int maxElements) {
-        super(initialCapacity,loadFactor,BAKeyValueRelation,newBeHeapCapacity,sharedBaHeap,maxElements);
+                                   BAKeyValueRelation BAKeyValueRelation,
+                                   long newBeHeapCapacity,
+                                   AbstractByteArrayHeap sharedBaHeap,
+                                   int maxElements,
+                                   Format format) throws IOException {
+        super(initialCapacity,loadFactor,BAKeyValueRelation,newBeHeapCapacity,sharedBaHeap,maxElements,
+                format         );
     }
 
     final int metadataSize =8;
@@ -49,18 +56,19 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
     void itemStored(int markedHandle) {
         Link tailLink = null;
         if (tail!=-1) {
-            byte[] tailMetadata = baHeap.retrieveMetadataByHandle(unmarkHandle(tail));
+            byte[] tailMetadata = baHeap.retrieveMetadataByOfs(
+                    getPureOffsetFromMarkedOffset(tail));
             tailLink = new Link(tailMetadata);
         }
         byte[] m = new byte[metadataSize];
         Link newHeadLink = new Link(tail,-1,m);
         newHeadLink.store();
-        baHeap.setMetadataByHandle(unmarkHandle(markedHandle),newHeadLink.metadata);
+        baHeap.setMetadataByOfs(getPureOffsetFromMarkedOffset(markedHandle),newHeadLink.metadata);
 
         if (tail!=-1) {
             tailLink.next = markedHandle;
             tailLink.store();
-            baHeap.setMetadataByHandle(unmarkHandle(tail), tailLink.metadata);
+            baHeap.setMetadataByOfs(getPureOffsetFromMarkedOffset(tail), tailLink.metadata);
         } else {
             head = markedHandle;
             tail = markedHandle;
@@ -73,16 +81,13 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
         if (size<maxElements) return;
 
         // Take one element from the head
-        int headHandle = unmarkHandle(head);
-        byte[] headMetadata = baHeap.retrieveMetadataByHandle(headHandle);
+        long headHandle = getPureOffsetFromMarkedOffset(head);
+        byte[] headMetadata = baHeap.retrieveMetadataByOfs(headHandle);
         Link headLink = new Link(headMetadata);
-        byte[] headData = baHeap.retrieveDataByHandle(headHandle);
+        byte[] headData = baHeap.retrieveDataByOfs(headHandle);
         ByteArrayWrapper key;
-        if (isValueHandle(head)) {
-            key = computeKey(headData);
-        } else {
-            key = new ByteArrayWrapper(headData);
-        }
+        key = getWrappedKeyFromKPD(headData,head);
+
         if (head==tail) {
             tail =-1;
         }
@@ -93,8 +98,8 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
 
     void afterNodeAccess(int markedHandle, byte[] p) {
         // Unlink and relink at tail
-        int handle = unmarkHandle(markedHandle);
-        byte[] metadata = baHeap.retrieveMetadataByHandle(handle);
+        long handle = getPureOffsetFromMarkedOffset(markedHandle);
+        byte[] metadata = baHeap.retrieveMetadataByOfs(handle);
         Link link = new Link(metadata);
         int prev = link.prev;
         int next = link.next;
@@ -111,14 +116,14 @@ public class MaxSizeByteArrayHashMap extends ByteArrayRefHashMap {
     }
 
     void setLink(int markedHandle,boolean setPrev,int prev,boolean setNext,int next) {
-        int handle = unmarkHandle(markedHandle);
-        byte[] metadata = baHeap.retrieveMetadataByHandle(handle);
+        long handle = getPureOffsetFromMarkedOffset(markedHandle);
+        byte[] metadata = baHeap.retrieveMetadataByOfs(handle);
         Link link = new Link(metadata);
         if (setNext)
             link.next = next;
         if (setPrev)
             link.prev = prev;
         link.store();
-        baHeap.setMetadataByHandle(handle,link.metadata);
+        baHeap.setMetadataByOfs(handle,link.metadata);
     }
 }

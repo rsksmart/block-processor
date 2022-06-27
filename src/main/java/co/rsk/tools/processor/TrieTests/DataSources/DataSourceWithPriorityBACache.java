@@ -2,6 +2,7 @@ package co.rsk.tools.processor.TrieTests.DataSources;
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
 import co.rsk.tools.processor.TrieTests.DataSources.DataSourceWithCACache;
+import co.rsk.tools.processor.TrieTests.bahashmaps.AbstractByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.bahashmaps.PrioritizedByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.cahashmaps.TrieCACacheRelation;
 import org.ethereum.datasource.CacheSnapshotHandler;
@@ -39,7 +40,9 @@ public class DataSourceWithPriorityBACache extends DataSourceWithCACache {
         else
             beHeapCapacity =(long) cacheSize*avgElementSize*14/10;
 
-        PrioritizedByteArrayHashMap bamap =  new PrioritizedByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,null,cacheSize);
+        PrioritizedByteArrayHashMap bamap =  new PrioritizedByteArrayHashMap(initialSize,loadFActor,myKR,
+                (long) beHeapCapacity,null,cacheSize,
+                null);
         bamap.removeInBulk = removeInBulk;
 
         Map<ByteArrayWrapper, byte[]> cache =bamap;

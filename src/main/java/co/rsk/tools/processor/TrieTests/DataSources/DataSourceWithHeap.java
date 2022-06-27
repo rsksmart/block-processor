@@ -2,6 +2,8 @@ package co.rsk.tools.processor.TrieTests.DataSources;
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
 import co.rsk.tools.processor.TrieTests.bahashmaps.ByteArray40HashMap;
+import co.rsk.tools.processor.TrieTests.bahashmaps.Format;
+import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayHeap;
 import co.rsk.tools.processor.TrieTests.baheaps.ByteArrayHeap;
 import co.rsk.tools.processor.TrieTests.bahashmaps.AbstractByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.cahashmaps.TrieCACacheRelation;
@@ -15,9 +17,9 @@ import java.util.*;
 
 public class DataSourceWithHeap extends DataSourceWithAuxKV {
     AbstractByteArrayHashMap bamap;
-    ByteArrayHeap sharedBaHeap;
+    AbstractByteArrayHeap sharedBaHeap;
     EnumSet<AbstractByteArrayHashMap.CreationFlag> creationFlags;
-    int dbVersion;
+    Format format;
 
     Path mapPath;
     Path dbPath;
@@ -31,11 +33,9 @@ public class DataSourceWithHeap extends DataSourceWithAuxKV {
 
     public DataSourceWithHeap(int maxNodeCount, long beHeapCapacity,
                               String databaseName,LockType lockType,
-                              EnumSet<AbstractByteArrayHashMap.CreationFlag> creationFlags,
-                              int dbVersion,boolean additionalKV) throws IOException {
+                              Format format,boolean additionalKV) throws IOException {
         super(databaseName,additionalKV);
-        this.creationFlags = creationFlags;
-        this.dbVersion = dbVersion;
+        this.format = format;
         mapPath = Paths.get(databaseName, "hash.map");
         dbPath = Paths.get(databaseName, "store");
 
@@ -77,7 +77,7 @@ public class DataSourceWithHeap extends DataSourceWithAuxKV {
         }
     }
 
-    ByteArrayHeap createByteArrayHeap(float loadFactor, long maxNodeCount, long maxCapacity) throws IOException {
+    AbstractByteArrayHeap createByteArrayHeap(float loadFactor, long maxNodeCount, long maxCapacity) throws IOException {
         ByteArrayHeap baHeap = new ByteArrayHeap();
         baHeap.setMaxMemory(maxCapacity); //730_000_000L); // 500 Mb / 1 GB
         Files.createDirectories(Paths.get(databaseName));
@@ -116,7 +116,7 @@ public class DataSourceWithHeap extends DataSourceWithAuxKV {
         //
         this.bamap =  new ByteArray40HashMap(initialSize,loadFActor,myKR,
                 (long) beHeapCapacity,
-                sharedBaHeap,0,creationFlags,dbVersion,0);
+                sharedBaHeap,0,format);
 
         this.bamap.setPath(mapPath);
         if (bamap.dataFileExists()) {

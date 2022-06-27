@@ -1,5 +1,6 @@
 package co.rsk.tools.processor.TrieTests.baheaps;
 
+import java.io.IOException;
 import java.util.List;
 
 // This class wraps a RefHeap with the interface of a normal heap, to be
@@ -75,5 +76,15 @@ public class ByteArrayHeapRefProxy implements AbstractByteArrayHeap {
     @Override
     public int getUsagePercent() {
         return refHeap.getUsagePercent();
+    }
+
+    @Override
+    public long load() throws IOException {
+        return 0;
+    }
+
+    @Override
+    public void save(long rootOfs) throws IOException {
+
     }
 }

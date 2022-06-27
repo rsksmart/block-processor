@@ -922,5 +922,13 @@ public class ByteArrayHeapBase {
     public int getPartiallyFilledSpacesCount() {
         return headOfPartiallyFilledSpaces.count;
     }
+
+    public void removeObjectByOfs(long encodedOfs) {
+
+    }
+
+    public void remapByOfs(long encodedOfs) {
+
+    }
 }
 

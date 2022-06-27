@@ -1,7 +1,10 @@
 package co.rsk.tools.processor.TrieTests.bahashmaps;
 
+import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayHeap;
 import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayRefHeap;
 import co.rsk.tools.processor.examples.storage.ObjectIO;
+
+import java.util.EnumSet;
 
 public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
 
@@ -13,40 +16,42 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
     int startScanForRemoval =0;
 
     public PrioritizedByteArrayHashMap(int initialCapacity, float loadFactor,
-                                       BAWrappedKeyValueRelation BAKeyValueRelation,
-                            long newBeHeapCapacity,
-                            AbstractByteArrayRefHeap sharedBaHeap,
-                            int maxElements) {
-        super(initialCapacity,loadFactor,BAKeyValueRelation,newBeHeapCapacity,sharedBaHeap,maxElements);
+                                       BAKeyValueRelation BAKeyValueRelation,
+                                       long newBeHeapCapacity,
+                                       AbstractByteArrayHeap sharedBaHeap,
+                                       int maxElements,
+                                       Format format) {
+        super(initialCapacity,loadFactor,BAKeyValueRelation,newBeHeapCapacity,sharedBaHeap,maxElements,
+                format);
     }
 
     public int getPriority(Object key) {
-        int e = this.getNode(hash(key), key,null);
+        long e = this.getNode(hash(key), key,null);
         if (e!=-1) {
-            e = unmarkHandle(e);
-            byte[] metadata =baHeap.retrieveMetadataByHandle(e);
+            e = getPureOffsetFromMarkedOffset(e);
+            byte[] metadata =baHeap.retrieveMetadataByOfs(e);
             int priority = ObjectIO.getInt(metadata,0);
             return priority;
         } else
             return -1;
     }
 
-    public void refreshedHandle(int p)  {
+    public void refreshedHandle(long p)  {
         // Update priority
         if ((maxElements!=0) && (moveToTopAccessedItems)) {
-            p = unmarkHandle(p);
-            byte[] metadata = baHeap.retrieveMetadataByHandle(p);
+            p = getPureOffsetFromMarkedOffset(p);
+            byte[] metadata = baHeap.retrieveMetadataByOfs(p);
             int priority = ObjectIO.getInt(metadata,0);
             priority = currentPriority++;
             ObjectIO.putInt(metadata,0,priority);
-            baHeap.setMetadataByHandle(p,metadata);
+            baHeap.setMetadataByOfs(p,metadata);
         }
 
     }
-    public byte[] getOptionalMetadata(int handle)  {
+    public byte[] getOptionalMetadata(long handle)  {
         byte[] metadata = null;
         if (maxElements>0)
-            metadata = baHeap.retrieveMetadataByHandle(unmarkHandle(handle));
+            metadata = baHeap.retrieveMetadataByOfs(getPureOffsetFromMarkedOffset(handle));
         return metadata;
     }
 
@@ -89,14 +94,14 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
     // limit.
     public int removeLowerPriorityElements(int from,int count, boolean notifyRemoval,boolean doremap) {
         int j = from;
-        int mask = table.length-1;
+        int mask = table.length()-1;
         int boundary = (from+count) & mask;
         for (int c = 0; c < count; ++c) {
-            int p = table[j];
-            if (p != empty) {
-                byte[] metadata =baHeap.retrieveMetadataByHandle(unmarkHandle(p));
+            long p = table.getPos(j);
+            if (p != emptyMarkedOffset) {
+                byte[] metadata =baHeap.retrieveMetadataByOfs(getPureOffsetFromMarkedOffset(p));
                 int priority = ObjectIO.getInt(metadata,0);
-
+                long pureOfs = getPureOffsetFromMarkedOffset(p);
                 if (priority<minPriority) {
                     // If an item is removed, then it must continue with the same index
                     // because another item may have take its place
@@ -108,16 +113,17 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
                     if (movedElementAcrossBoundary)
                         j =j;
                     if (notifyRemoval) {
-                        if (!isValueHandle(p)) {
-                            byte[] key =    baHeap.retrieveDataByHandle(unmarkHandle(p));
+
+                        if (!isValueMarkedOffset(p)) {
+                            byte[] key =    baHeap.retrieveDataByOfs(pureOfs);
                             this.afterNodeRemoval(key,null, metadata);
                         } else {
-                            byte[] data = baHeap.retrieveDataByHandle(p);
+                            byte[] data = baHeap.retrieveDataByOfs(pureOfs);
                             this.afterNodeRemoval(null,data, metadata);
                         }
                     }
                     // If an element was moved to replace the one removed
-                    if ((table[j]!=empty) && (!movedElementAcrossBoundary)) {
+                    if ((table.getPos(j)!=emptyMarkedOffset) && (!movedElementAcrossBoundary)) {
                         // This wraps-around zero correctly in Java.
                         // The previous value of 0 is mask.
                         j = (j - 1) & mask;
@@ -128,7 +134,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
                 if (doremap) {
                     // Note: some elements in the wrap-around boundary [(from+count-1)..from]
                     // May be marked two times for remap.
-                    baHeap.remapByHandle(unmarkHandle(p));
+                    baHeap.remapByOfs(pureOfs);
                 }
             }
             j = (j+1) & mask;
@@ -151,7 +157,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
 
             checkHeap();
             int priorSize = size;
-            if (baHeap.heapIsAlmostFull()) {
+            if (baHeap.getUsagePercent()>95) {
                 if (logEvents)
                     System.out.println("Remapping simultaneusly");
                 baHeap.beginRemap();
@@ -160,7 +166,7 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
                 baHeap.endRemap();
             }
             else
-                removeLowerPriorityElements(0, table.length, false,false);
+                removeLowerPriorityElements(0, table.length(), false,false);
             if (logEvents)
                 System.out.println("Stop removing elements ("+(priorSize-size)+" elements removed)");
             checkHeap();
@@ -190,10 +196,10 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
             minPriority = minPriority + (size() - maxReducedElements) / divisor;
             int prevSize = size();
 
-            startScanForRemoval = removeLowerPriorityElements(startScanForRemoval,table.length/divisor,false, false);
+            startScanForRemoval = removeLowerPriorityElements(startScanForRemoval,table.length()/divisor,false, false);
             //System.out.println("removed "+(prevSize-size) + " = "+(prevSize-size)*100/prevSize+"%");
             if (size()<prevSize)  {
-                if (baHeap.heapIsAlmostFull())
+                if (baHeap.getUsagePercent()>95)
                     compressHeap();
             }
         }
@@ -213,14 +219,14 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
 
         checkHeap();
         int priorSize = size;
-        if (baHeap.heapIsAlmostFull()) {
+        if (baHeap.getUsagePercent()>95) {
             if (logEvents)
                 System.out.println("Remapping simultaneously");
             baHeap.beginRemap();
-            removeLowerPriorityElements(0, table.length, false, true);
+            removeLowerPriorityElements(0, table.length(), false, true);
             baHeap.endRemap();
         } else
-            removeLowerPriorityElements(0, table.length, false, false);
+            removeLowerPriorityElements(0, table.length(), false, false);
         if (logEvents)
             System.out.println("Stop removing elements (" + (priorSize - size) + " elements removed)");
         checkHeap();
@@ -229,19 +235,19 @@ public class PrioritizedByteArrayHashMap extends ByteArrayRefHashMap {
     void reprioritize() {
         if (logEvents)
             System.out.println("Reprioritizing");
-        int count = table.length;
+        int count = table.length();
         for (int c = 0; c < count; ++c) {
-            int p = table[c];
-            if (p != empty) {
-                p = unmarkHandle(p);
-                byte[] metadata = baHeap.retrieveMetadataByHandle(p);
+            long p = table.getPos(c);
+            if (p != emptyMarkedOffset) {
+                long pureOfs =getPureOffsetFromMarkedOffset(p);
+                byte[] metadata = baHeap.retrieveMetadataByOfs(pureOfs);
                 int priority = ObjectIO.getInt(metadata,0);
                 if (priority<minPriority)
                     priority =0;
                 else
                     priority -=minPriority;
                 ObjectIO.putInt(metadata,0,priority);
-                baHeap.setMetadataByHandle(p,metadata);
+                baHeap.setMetadataByOfs(pureOfs,metadata);
             }
 
         }

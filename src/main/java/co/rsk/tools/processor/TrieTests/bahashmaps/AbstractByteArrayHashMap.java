@@ -21,7 +21,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
     static final int MAXIMUM_CAPACITY = 1073741824;
     static final float DEFAULT_LOAD_FACTOR = 0.5F;
     static final long defaultNewBeHeapCapacity = 750_000_000;
-    public static final int latestDBVersion = 1;
+
 
     static final boolean debugCheckHeap = false;
     static final String debugKey=null;
@@ -34,11 +34,10 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
 
     ///////////////////////////
     // For file I/O
-    int dbVersion;
+    Format format;
     boolean resized;
     boolean loaded;
     Path mapPath;
-    int pageSize = 4096;
 
     ///////////////////////////
     // For performance evaluation
@@ -86,13 +85,17 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
                                     BAKeyValueRelation BAKeyValueRelation,
                                     long newBeHeapCapacity,
                                     AbstractByteArrayHeap sharedBaHeap,
-                                    int maxElements, EnumSet<CreationFlag> creationFlags,
-                                    int dbVersion,int pageSizeInBytes) {
+                                    int maxElements,
+                                    Format format) {
         this.loadFactor = 0;
-        this.dbVersion =dbVersion;
-        this.supportNullValues = creationFlags.contains(CreationFlag.supportNullValues);
-        this.allowRemovals = creationFlags.contains(CreationFlag.allowRemovals);
-        this.supportBigValues = creationFlags.contains(CreationFlag.supportBigValues);
+        this.format =format;
+        if (format != null) {
+            this.supportNullValues = format.creationFlags.contains(CreationFlag.supportNullValues);
+            this.allowRemovals = format.creationFlags.contains(CreationFlag.allowRemovals);
+            this.supportBigValues = format.creationFlags.contains(CreationFlag.supportBigValues);
+        } else
+            format = new Format();
+
         keysize = BAKeyValueRelation.getKeySize();
 
         // Try to use all possible heap space if some features are not supported.
@@ -103,7 +106,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
             if (supportNullValues)
                 removeMarksMask = nullMarkedOffsetBitMask-1;
 
-        this.pageSize = pageSize = pageSizeInBytes;
+
         if (initialCapacity < 0) {
             throw new IllegalArgumentException("Illegal initial capacity: " + initialCapacity);
         } else {
@@ -174,7 +177,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
         return this.baHeap;
     }
 
-    ByteArrayHeap createByteArrayHeap(long initialCapacity, long newBeHeapCapacity)  {
+    AbstractByteArrayHeap createByteArrayHeap(long initialCapacity, long newBeHeapCapacity)  {
         ByteArrayHeap baHeap = new ByteArrayHeap();
         baHeap.setMaxMemory(newBeHeapCapacity); //730_000_000L); // 500 Mb / 1 GB
         baHeap.initialize();
@@ -189,9 +192,9 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
     }
 
     public AbstractByteArrayHashMap(int initialCapacity, BAKeyValueRelation BAKeyValueRelation,
-                                    EnumSet<CreationFlag> creationFlags,int dbVersion,int pageSizeInBytes) {
+                                    Format format) {
         this(initialCapacity, DEFAULT_LOAD_FACTOR, BAKeyValueRelation,defaultNewBeHeapCapacity,null,
-                0,creationFlags,dbVersion,pageSizeInBytes);
+                0,format);
     }
 
     public AbstractByteArrayHashMap() {
@@ -238,7 +241,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
     }
 
     public long getPureOffsetFromMarkedOffset(long markedOffset) {
-        if (dbVersion==0)
+        if (format.dbVersion==0)
             return (markedOffset);
             else
             return (markedOffset & removeMarksMask)-1;
@@ -1297,7 +1300,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
         Header header = readHeader(headerFileName,true);
         this.threshold = header.threshold;
         this.size = header.size;
-        this.dbVersion = header.dbVersion;
+        this.format.dbVersion = header.dbVersion;
 
         table = createTable(header.totalSize);
         System.out.println("Reading hash table");
@@ -1323,7 +1326,7 @@ public abstract class AbstractByteArrayHashMap  extends AbstractMap<ByteArrayWra
         String headerFileName = fileName+".hdr";
         Header header = new Header();
 
-        header.dbVersion = dbVersion;
+        header.dbVersion = format.dbVersion;
         header.totalSize = table.length();
         header.size = size;
         header.threshold = threshold;

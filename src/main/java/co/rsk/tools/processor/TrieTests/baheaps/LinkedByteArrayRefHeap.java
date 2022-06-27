@@ -1,6 +1,8 @@
 package co.rsk.tools.processor.TrieTests.baheaps;
 
 
+import java.util.List;
+
 public class LinkedByteArrayRefHeap implements AbstractByteArrayRefHeap {
 
     byte[][] data;
@@ -205,5 +207,10 @@ public class LinkedByteArrayRefHeap implements AbstractByteArrayRefHeap {
     @Override
     public void remapByHandle(int handle) {
 
+    }
+
+    @Override
+    public List<String> getStats() {
+        return null;
     }
 }

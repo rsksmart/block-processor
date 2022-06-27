@@ -17,7 +17,7 @@ import java.util.*;
 // The use of indirection allows the compression of the files without propagating
 // the changes to the objects that hold the pointers to the hash elements.
 
-public class ByteArrayRefHeap extends ByteArrayHeapBase implements AbstractByteArrayRefHeap {
+public class ByteArrayRefHeap extends ByteArrayHeap implements AbstractByteArrayRefHeap {
     // The number of maxObjects must be at least 5 times higher than the number of
     // elements that will be inserted in the trie because intermediate nodes
     // consume handles also.

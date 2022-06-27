@@ -13,15 +13,6 @@ public class ByteArrayHeap extends ByteArrayHeapBase implements AbstractByteArra
         return (f.exists() && !f.isDirectory());
     }
 
-    @Override
-    public void removeObjectByOfs(long encodedOfs) {
-
-    }
-
-    @Override
-    public void remapByOfs(long encodedOfs) {
-
-    }
 
     public long load() throws IOException {
         long r = super.load();

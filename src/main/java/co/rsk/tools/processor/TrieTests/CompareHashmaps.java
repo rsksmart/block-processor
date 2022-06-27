@@ -1,9 +1,8 @@
 package co.rsk.tools.processor.TrieTests;
 
-import co.rsk.tools.processor.TrieTests.bahashmaps.ByteArrayRefHashMap;
-import co.rsk.tools.processor.TrieTests.bahashmaps.MaxSizeByteArrayHashMap;
-import co.rsk.tools.processor.TrieTests.bahashmaps.MaxSizeLinkedByteArrayHashMap;
-import co.rsk.tools.processor.TrieTests.bahashmaps.PrioritizedByteArrayHashMap;
+import co.rsk.tools.processor.TrieTests.bahashmaps.*;
+import co.rsk.tools.processor.TrieTests.baheaps.AbstractByteArrayHeap;
+import co.rsk.tools.processor.TrieTests.baheaps.ByteArrayHeapRefProxy;
 import co.rsk.tools.processor.TrieTests.baheaps.LinkedByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.baheaps.SimpleByteArrayRefHeap;
 import co.rsk.tools.processor.TrieTests.Unitrie.store.*;
@@ -13,6 +12,7 @@ import co.rsk.tools.processor.TrieTests.cahashmaps.TrieCACacheRelation;
 import co.rsk.util.MaxSizeHashMap;
 import org.ethereum.db.ByteArrayWrapper;
 
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.*;
@@ -154,21 +154,33 @@ public class CompareHashmaps extends Benchmark {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             int avgElementSize =88;
             long beHeapCapacity =(long) vmax*avgElementSize*11/10;
-            map =  new ByteArrayRefHashMap(initialSize,loadFactor,myKR,(long) beHeapCapacity,null,0 );
+            map =  new ByteArrayRefHashMap(initialSize,loadFactor,myKR,
+                    (long) beHeapCapacity,null,0,
+                    null
+                    );
         }
         else
         if (testDS== DataStructure.MaxSizeMetadataLinkedByteArrayHashMap) {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             SimpleByteArrayRefHeap sharedBaHeap = new SimpleByteArrayRefHeap(maxSize,8);
-            MaxSizeByteArrayHashMap pmap =  new MaxSizeByteArrayHashMap(initialSize,loadFactor,myKR,0,sharedBaHeap,
-                    maxSize );
+            AbstractByteArrayHeap bah = new ByteArrayHeapRefProxy(sharedBaHeap);
+            MaxSizeByteArrayHashMap pmap = null;
+            try {
+                pmap = new MaxSizeByteArrayHashMap(initialSize,loadFactor,myKR,
+                        0,bah,
+                        maxSize, null);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             map = pmap;
         } else
         if (testDS== DataStructure.MaxSizeLinkedByteArrayHashMap) {
             MyBAKeyValueRelation myKR = new MyBAKeyValueRelation();
             LinkedByteArrayRefHeap sharedBaHeap = new LinkedByteArrayRefHeap(maxSize,0);
-            MaxSizeLinkedByteArrayHashMap pmap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFactor,myKR,0,sharedBaHeap,
-                    maxSize,true );
+            AbstractByteArrayHeap bah = new ByteArrayHeapRefProxy(sharedBaHeap);
+            MaxSizeLinkedByteArrayHashMap pmap =  new MaxSizeLinkedByteArrayHashMap(initialSize,loadFactor,myKR,
+                    0,bah,sharedBaHeap,
+                    maxSize,true,null );
             map = pmap;
         } else
         if (testDS== DataStructure.PrioritizedByteArrayHashMap) {
@@ -181,7 +193,9 @@ public class CompareHashmaps extends Benchmark {
             else
                 beHeapCapacity =(long) maxSize*avgElementSize*14/10;
 
-            PrioritizedByteArrayHashMap pmap =  new PrioritizedByteArrayHashMap(initialSize,loadFactor,myKR,(long) beHeapCapacity,null,maxSize );
+            PrioritizedByteArrayHashMap pmap =  new PrioritizedByteArrayHashMap(initialSize,loadFactor,
+                    myKR,(long) beHeapCapacity,null,maxSize,
+                    null);
             pmap.removeInBulk = removeInBulk;
             map = pmap;
         }

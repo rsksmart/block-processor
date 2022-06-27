@@ -13,14 +13,13 @@ public class ByteArray64HashMap extends AbstractByteArrayHashMap {
                               long newBeHeapCapacity,
                               AbstractByteArrayHeap sharedBaHeap,
                               int maxElements,
-                              EnumSet<CreationFlag> creationFlags,
-                              int dbVersion,int pageSizeInBytes) {
+                              Format format) {
         super(initialCapacity,  loadFactor,
         BAKeyValueRelation,
         newBeHeapCapacity,
          sharedBaHeap,
                 maxElements,
-                creationFlags,dbVersion,pageSizeInBytes);
+                format);
     }
 
     protected int getElementSize() {

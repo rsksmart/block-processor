@@ -20,12 +20,14 @@ package co.rsk.tools.processor.TrieTests.DataSources;
 
 
 import co.rsk.tools.processor.TrieTests.MyBAKeyValueRelation;
+import co.rsk.tools.processor.TrieTests.bahashmaps.AbstractByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.bahashmaps.MaxSizeByteArrayHashMap;
 import co.rsk.tools.processor.TrieTests.cahashmaps.TrieCACacheRelation;
 import org.ethereum.datasource.CacheSnapshotHandler;
 import org.ethereum.datasource.KeyValueDataSource;
 import org.ethereum.db.ByteArrayWrapper;
 
+import java.io.IOException;
 import java.util.*;
 
 
@@ -59,8 +61,16 @@ public class DataSourceWithBACache extends DataSourceWithCacheAndStats {
         else
             beHeapCapacity =(long) cacheSize*avgElementSize*14/10;
 
-        MaxSizeByteArrayHashMap bamap =  new MaxSizeByteArrayHashMap(initialSize,loadFActor,myKR,(long) beHeapCapacity,
-                null,cacheSize);
+        MaxSizeByteArrayHashMap bamap = null;
+        try {
+            bamap = new MaxSizeByteArrayHashMap(initialSize,loadFActor,myKR,
+                    (long) beHeapCapacity,
+                    null,cacheSize,
+                    null
+                    );
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         innerCache = bamap;
 
         Map<ByteArrayWrapper, byte[]> cache =bamap;
